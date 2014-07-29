@@ -41,23 +41,7 @@ server with the following components:
 Author: Daniel Kuntz
 """
 
-#Settings
-username_main = 'dktoao'
-username_email = 'robomailer'
-email_address_webmaster = 'daniel.kuntz@dk-cloud.net'
-django_db_name = 'dkcloud_db'
-django_db_user = 'dkcloud_django'
-ip_address = '198.58.125.218'
-domain = 'dk-cloud.net'
-app_name = 'dkcloud'
-server_name = 'electrode'
-dkim_selector = 'web'
-#web_directory = '/var/www'
-#repo_directory = '/var/repo'
-python_version = '3.4'
-postgres_version = '9.3'
-password_login = 'yes'
-use_https = True
+from deploy_settings import *
 
 
 # Imports

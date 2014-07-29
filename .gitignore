@@ -1,0 +1,12 @@
+# Compiled files
+*.pyc
+
+# Settings files
+deploy_settings.py
+
+# Deploy info
+passwords.json
+dkim.public.key
+
+# c9 Files
+.c9/
