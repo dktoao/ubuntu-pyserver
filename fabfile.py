@@ -362,8 +362,6 @@ def configure_django():
     python_env = 'source /var/www/env/%s/bin/activate && ' % domain
     with cd('/var/www/%s/%s' % (domain, app_name)):
         run('mkdir static') # Static files
-        run('mkdir templates') # Template files
-        #put('config/.gitignore', '..') # .gitignore file
         upload_config('/var/www/%s' % domain, '.gitignore', {
             'app_name': app_name,
         })
@@ -378,7 +376,7 @@ def configure_django():
         })
     
         # Set up secrets.py file and change ownership to root
-        upload_config(app_name, 'secrets.py', {
+        upload_config(app_name, 'secrets_template.py', {
             'secret_key': random_password('DJANGO SECRETKEY',80,120),
             'debug': 'False',
             'template_debug': 'False',
@@ -387,7 +385,7 @@ def configure_django():
             'django_db_pwd': random_password('DJANGO DATABASE'),
             'username_email': username_email,
             'password_email': random_password('MAIL USER'),
-        })
+        }, rename="secrets.py")
         sudo('chown root:www-data %s/secrets.py' % app_name)
         sudo('chmod 640 %s/secrets.py' % app_name)
         

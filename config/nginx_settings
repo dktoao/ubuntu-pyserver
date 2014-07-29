@@ -19,8 +19,4 @@ server {
     location /static {
         root /var/www/{{domain}}/{{app_name}}/;
     }
-    
-    location /templates {
-        root /var/www/{{domain}}/{{app_name}}/;
-    }
 }
