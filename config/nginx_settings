@@ -1,0 +1,26 @@
+upstream django {
+    server unix:///tmp/{{app_name}}.sock;
+}
+
+server {
+    listen      80;
+    server_name .{{domain}};
+    charset     utf-8;
+    access_log /var/log/{{domain}}/access.log;
+    error_log /var/log/{{domain}}/error.log;
+    
+    location / {
+        uwsgi_pass  django;
+        include     /etc/nginx/uwsgi_params;
+        uwsgi_param UWSGI_SCHEME    $scheme;
+        uwsgi_param SERVER_SOFTWARE nginx/$nginx_version;
+    }
+    
+    location /static {
+        root /var/www/{{domain}}/{{app_name}}/;
+    }
+    
+    location /templates {
+        root /var/www/{{domain}}/{{app_name}}/;
+    }
+}

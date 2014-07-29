@@ -1,0 +1,37 @@
+upstream django {
+    server unix:///tmp/{{app_name}}.sock;
+}
+
+server {
+    listen              80;
+    server_name         .{{domain}};
+    rewrite ^ https://$server_name$request_uri? permanent;
+}
+
+server {
+    listen              443 ssl;
+    server_name         .{{domain}};
+    keepalive_timeout   70;
+    ssl_certificate     /etc/nginx/https.cert;
+    ssl_certificate_key /etc/nginx/https.key;
+    ssl_protocols       SSLv3 TLSv1 TLSv1.1 TLSv1.2;
+    ssl_ciphers         HIGH:!aNULL:!MD5;
+    charset             utf-8;
+    access_log /var/log/{{domain}}/access.log;
+    error_log /var/log/{{domain}}/error.log;
+    
+    location / {
+        uwsgi_pass  django;
+        include     /etc/nginx/uwsgi_params;
+        uwsgi_param UWSGI_SCHEME    $scheme;
+        uwsgi_param SERVER_SOFTWARE nginx/$nginx_version;
+    }
+    
+    location /static {
+        root /var/www/{{domain}}/{{app_name}}/;
+    }
+    
+    location /templates {
+        root /var/www/{{domain}}/{{app_name}}/;
+    }
+}

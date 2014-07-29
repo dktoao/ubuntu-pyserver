@@ -1,0 +1,8 @@
+# Local Settings for the Exim mailer system
+
+# Enable DKIM
+DKIM_CANON = relaxed
+DKIM_PRIVATE_KEY = CONFDIR/dkim.private.key
+DKIM_DOMAIN = {{domain}}
+DKIM_SELECTOR = {{dkim_selector}}
+MAIN_HARDCODE_PRIMARY_HOSTNAME = {{domain}}
