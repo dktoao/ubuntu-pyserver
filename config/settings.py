@@ -19,11 +19,9 @@ from . import secrets
 # See https://docs.djangoproject.com/en/1.6/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-#SECRET_KEY = '2w7wu517#^8^1o!^2-dqyv^itig&@^o+!=jjvnuwop#m#&izs$'
 SECRET_KEY = secrets.SECRET_KEY
 
 # SECURITY WARNING: don't run with debug turned on in production!
-#DEBUG = True
 DEBUG = secrets.DEBUG
 
 #TEMPLATE_DEBUG = True
@@ -67,8 +65,8 @@ DATABASES = {
         'NAME': secrets.DATABASE_NAME,
         'USER': secrets.DATABASE_USER,
         'PASSWORD': secrets.DATABASE_PASSWORD,
-        #'HOST': secrets.DATABASE_HOST,
-        #'PORT': secrets.DATABASE_PORT,
+        'HOST': secrets.DATABASE_HOST,
+        'PORT': secrets.DATABASE_PORT,
     }
 }
 
