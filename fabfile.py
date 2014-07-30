@@ -376,6 +376,7 @@ def configure_django():
         })
     
         # Set up secrets.py file and change ownership to root
+        put('config/secrets_template.py', '/var/www/%s/%s/%s/secrets_template.py' % (domain, app_name, app_name))
         upload_config(app_name, 'secrets_template.py', {
             'secret_key': random_password('DJANGO SECRETKEY',80,120),
             'debug': 'False',
