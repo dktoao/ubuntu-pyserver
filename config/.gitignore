@@ -3,14 +3,10 @@
 *.pyo
 
 # Secret Settings file
-*secrets.py
-
-# Static and template folders
-{{app_name}}/static
-{{app_name}}/templates
+secrets.py
 
 # Backup files
 *.backup
 
 # Cache files
-dkcloud/__pycache__
+__pycache__/
