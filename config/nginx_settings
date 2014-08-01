@@ -6,8 +6,8 @@ server {
     listen      80;
     server_name .{{domain}};
     charset     utf-8;
-    access_log /var/log/{{domain}}/access.log;
-    error_log /var/log/{{domain}}/error.log;
+    access_log /var/log/{{domain}}/nginx_access.log;
+    error_log /var/log/{{domain}}/nginx_error.log;
     
     location / {
         uwsgi_pass  django;
@@ -17,6 +17,6 @@ server {
     }
     
     location /static {
-        root /var/www/{{domain}}/{{app_name}}/;
+        root /var/www;
     }
 }

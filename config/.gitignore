@@ -3,7 +3,7 @@
 *.pyo
 
 # Secret Settings file
-secrets.py
+/{{app_name}}/{{app_name}}/secrets.py
 
 # Backup files
 *.backup

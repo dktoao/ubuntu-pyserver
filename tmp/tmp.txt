@@ -1,1 +1,1 @@
-This directory is used to store temporary files created by the program
+This directory is used to store temporary files created by this program

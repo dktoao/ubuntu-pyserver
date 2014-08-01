@@ -10,3 +10,7 @@ dkim.public.key
 
 # c9 Files
 .c9/
+
+# Temporary files
+/tmp/
+!/tmp/tmp.txt

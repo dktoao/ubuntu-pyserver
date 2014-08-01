@@ -1,53 +1,12 @@
 """
 Fabric file for the deployment of a fully capable web server on an 
-Ubuntu 14.04 LTS machine with the 
-following components:
-
-    ## Computing ##
-    - Python / Django, Set up with proper virtualenv, a super
-    user account and a migration ready connection to a PostgreSQL database
-        - Django
-        - Numpy
-        - Scipy
-        - Pandas
-        - Matplotlib
-        - uWSGI
-        - psycopg2
-        - South (depreciated with Django 1.7)
-        
-    ## Database ##
-    - PostgreSQL
-    
-    ## Server Stack ##
-    - uWSGI
-    - nginx
-    
-    ## Email ##
-    - Exim (send only)
-    - Authentication via DKIM
-    
-    ## App Deployment ##
-    - Git, set up to automatically deploy to a production server
-    - On server workspace that is easily connected to Cloud9 ide.
-    
-    ## Security ##
-    - iptables firewall
-    - appropriate user accounts
-        - outside ssl access to all users
-        - internal ssl access to git user from main user account
-    - fail2ban
-    - https with self signed ssl cert (optional)
-    
-    ## Bash ##
-    - Alias for virtualenv "loadenv"
-    - Alias for running a test server at port 8080 "runtestserver"
-    - Alias for running a deploy from repository script "livedeploy"
+Ubuntu 14.04 LTS machine.
     
 Author: Daniel Kuntz
 """
 
-from deploy_settings import *
-
+# Import settings
+import deploy_settings as ds
 
 # Imports
 from fabric.api import run, get, put, env, sudo, hosts, local
@@ -61,7 +20,7 @@ import json
 # Set up Jinja environment
 template_env = Environment(loader=FileSystemLoader('config'))
 
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def full_setup():
     '''
     Runs all root deployment scripts
@@ -75,12 +34,11 @@ def full_setup():
     remove_root_login()
     restart()
     
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def full_deploy():
     '''
     Runs all primary user deployment scripts
     '''
-    
     # Advanced Setup
     install_postgres()
     install_exim()
@@ -88,9 +46,11 @@ def full_deploy():
     install_python()
     configure_django_workspace()
     setup_repo()
+    setup_production_code()
+    setup_bash_aliases()
     restart()
     
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def setup_hosts():
     '''
     Set up host configurations
@@ -99,18 +59,18 @@ def setup_hosts():
     print("Setting up basic settings:")
     
     # Set the hostname and mailname
-    run('echo "%s" > /etc/hostname' % (server_name + "." + domain))
+    run('echo "%s" > /etc/hostname' % (ds.server_name + "." + ds.domain))
     run('hostname -F /etc/hostname')
-    run('echo "%s" > /etc/mailname' % domain)
+    run('echo "%s" > /etc/mailname' % ds.domain)
     
     # Update the /etc/hosts file
     upload_config('/etc', 'hosts', {
-        'server_name': server_name,
-        'domain': domain,
-        'ip_address': ip_address,
+        'server_name': ds.server_name,
+        'domain': ds.domain,
+        'ip_address': ds.ip_address,
     })
     
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def upgrade():
     '''
     Upgrade server software
@@ -121,7 +81,7 @@ def upgrade():
     run('apt-get update')
     run('apt-get -y upgrade')
     
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def setup_users():
     '''
     Set up users and groups with super user and rsa key access to server
@@ -129,24 +89,27 @@ def setup_users():
     print("Setting up users and access")
     
     #Create super user
-    run('adduser --gecos "" %s' % username_main)
+    run('adduser --gecos "" %s' % ds.username_main)
     # Add to sudo and www-data groups
-    run('usermod -a -G sudo %s' % username_main)
-    run('usermod -a -G www-data %s' % username_main)
+    run('usermod -a -G sudo %s' % ds.username_main)
+    run('usermod -a -G www-data %s' % ds.username_main)
     # copy local public key to .ssh/authorized_keys
-    run('mkdir /home/%s/.ssh' % username_main)
-    put('~/.ssh/id_rsa.pub', '/home/%s/.ssh/authorized_keys' % username_main)
-    # create own private key
-    run('ssh-keygen -t rsa -C "%s@%s" -f ~/.ssh/id_rsa -N ""' % (username_main, server_name))
-    # Change ownership and permissions for uploaded file
-    run('chown -R %s:%s /home/%s/.ssh'% (username_main, username_main, username_main))
-    run('chmod 500 /home/%s/.ssh' % username_main)
-    run('chmod 400 /home/%s/.ssh/authorized_keys' % username_main)
+    run('mkdir /home/%s/.ssh' % ds.username_main)
+    with cd('/home/%s/.ssh' % ds.username_main):
+        put('~/.ssh/id_rsa.pub', 'authorized_keys')
+        # Create own private key
+        run('ssh-keygen -t rsa -C "%s@%s" -f id_rsa -N ""' % (ds.username_main, ds.server_name))
+        # Change ownership and permissions for uploaded file
+        run('chown -R %s:%s .'% (ds.username_main, ds.username_main))
+        run('chmod 500 .')
+        run('chmod 600 authorized_keys')
+        run('chmod 600 id_rsa')
+        run('chmod 644 id_rsa.pub')
     
     # Create mail user
     mail_password = random_password('MAIL USER')
-    run('adduser --gecos "" --disabled-password %s' % username_email)
-    run('echo "%s:%s" | chpasswd' % (username_email, mail_password))
+    run('adduser --gecos "" --disabled-password %s' % ds.username_email)
+    run('echo "%s:%s" | chpasswd' % (ds.username_email, mail_password))
     
     # Create git user
     git_password = random_password('GIT USER')
@@ -156,13 +119,13 @@ def setup_users():
     run('mkdir /home/git/.ssh')
     put('~/.ssh/id_rsa.pub', '/home/git/.ssh/authorized_keys')
     # add local public key to .ssh/authorized_keys
-    run('cat /home/%s/.ssh/id_rsa.pub >> /home/git/.ssh/authorized_keys')
+    run('cat /home/%s/.ssh/id_rsa.pub >> /home/git/.ssh/authorized_keys' % ds.username_main)
     # Change ownership and permissions for uploaded file
     run('chown -R git:git /home/git/.ssh')
     run('chmod 500 /home/git/.ssh')
     run('chmod 400 /home/git/.ssh/authorized_keys')
     
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def setup_firewall():
     '''
     Setup iptables firewall with basic security settings
@@ -177,7 +140,7 @@ def setup_firewall():
     put('config/firewall', '/etc/network/if-pre-up.d')
     run('chmod +x /etc/network/if-pre-up.d/firewall')
     
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def setup_fail2ban():
     '''
     Install and setup fail2ban software
@@ -186,7 +149,7 @@ def setup_fail2ban():
     
     run('apt-get install -y fail2ban')
     
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def remove_root_login():
     '''
     Removing ability to log-in as root and set password login ability
@@ -195,10 +158,10 @@ def remove_root_login():
     print('Diabling root login')
     
     upload_config('/etc/ssh', 'sshd_config', {
-        'password_login': password_login,
+        'password_login': ds.password_login,
     })
 
-@hosts('root@%s' % ip_address)
+@hosts('root@%s' % ds.ip_address)
 def restart():
     '''
     Restart the server
@@ -207,7 +170,7 @@ def restart():
     #reboot()
     sudo('reboot')
     
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_postgres():
     '''
     Install and configure postgres with a user for Django
@@ -215,26 +178,26 @@ def install_postgres():
     print('Installing/Configuring PostgreSQL server')
     
     # Install postgres
-    sudo('apt-get install -y postgresql-%s postgresql-contrib-%s' %(postgres_version, postgres_version))
+    sudo('apt-get install -y postgresql-%s postgresql-contrib-%s' %(ds.postgres_version, ds.postgres_version))
     # Install the adminpack extension
     sudo('psql -c "CREATE EXTENSION adminpack"', user='postgres')
     # Create a django database user
-    sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' % (django_db_user, random_password('DJANGO DATABASE')), user='postgres')
+    sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' % (ds.django_db_user, random_password('DJANGO DATABASE')), user='postgres')
     # Create a database for django to use
-    sudo('createdb -O %s %s' % (django_db_user, django_db_name), user='postgres')
+    sudo('createdb -O %s %s' % (ds.django_db_user, ds.django_db_name), user='postgres')
     # Create a test database and test user
-    if local_test_db:
-        sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' % (django_db_test_user, random_password('DJANGO TEST DATABASE')), user='postgres')
-        sudo('createdb -O %s %s' % (django_db_test_user, django_db_test_name), user='postgres')
+    if ds.local_test_db:
+        sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' % (ds.django_db_test_user, random_password('DJANGO TEST DATABASE')), user='postgres')
+        sudo('createdb -O %s %s' % (ds.django_db_test_user, ds.django_db_test_name), user='postgres')
     # Update the postgres pg_hba.conf file
-    upload_config('/etc/postgresql/%s/main' % postgres_version, 'pg_hba.conf', {
-        'django_db_user': django_db_user,
-        'django_db_test_user': django_db_test_user,
+    upload_config('/etc/postgresql/%s/main' % ds.postgres_version, 'pg_hba.conf', {
+        'django_db_user': ds.django_db_user,
+        'django_db_test_user': ds.django_db_test_user,
     })
     # Restart the postgres server
     sudo('service postgresql restart')
     
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_exim():
     '''
     Install exim4 mailer in a send only configuration
@@ -246,8 +209,8 @@ def install_exim():
     sudo('apt-get install -y exim4-daemon-light mailutils')
     # Initial Setup of Exim
     upload_config('/etc/exim4', 'update-exim4.conf.conf', {
-        'domain': domain,
-        'server_name': server_name,
+        'domain': ds.domain,
+        'server_name': ds.server_name,
     })
     
     # Set up a security certificate
@@ -264,22 +227,22 @@ def install_exim():
         
     # Update Exim configuration to use DKIM signing
     upload_config('/etc/exim4/conf.d/main', '00_local_settings', {
-        'domain': domain,
-        'dkim_selector': dkim_selector,
+        'domain': ds.domain,
+        'dkim_selector': ds.dkim_selector,
     })
     
     # Configure email addresses for primary users
     upload_config('/etc', 'email-addresses', {
-        'domain': domain,
-        'username_main': username_main,
-        'username_email': username_email,
+        'domain': ds.domain,
+        'username_main': ds.username_main,
+        'username_email': ds.username_email,
     })
     
     # Restart exim
     sudo('update-exim4.conf')
     sudo('service exim4 restart')
 
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_nginx():
     '''
     Installs and configures nginx server
@@ -291,10 +254,10 @@ def install_nginx():
     sudo('apt-get install -y nginx-full')
     
     # Create directory for nginx logs
-    sudo('mkdir -p /var/log/%s' % domain)
+    sudo('mkdir -p /var/log/%s' % ds.domain)
     
     # Create a self-signed SSL certificate if required
-    if use_https:
+    if ds.use_https:
         with cd('/etc/nginx'):
             sudo('openssl genrsa -out https.key 1024')
             sudo('openssl req -new -key https.key -out https.csr')
@@ -311,15 +274,15 @@ def install_nginx():
             
     # Configure nginx
     upload_config('/etc/nginx/sites-available', nginx_config_file, {
-        'domain': domain,
-        'app_name': app_name,
-    }, rename=domain)
+        'domain': ds.domain,
+        'app_name': ds.app_name,
+    }, rename=ds.domain)
     
     # enable the site
     sudo('rm /etc/nginx/sites-enabled/default')
-    sudo('ln -s /etc/nginx/sites-available/%s /etc/nginx/sites-enabled/%s' % (domain, domain))
+    sudo('ln -s /etc/nginx/sites-available/%s /etc/nginx/sites-enabled/%s' % (ds.domain, ds.domain))
     
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_python():
     '''
     Install Python and desired packages in a virtualenv at /var/venv
@@ -328,11 +291,11 @@ def install_python():
     print('Installing python virtualenv')
     
     # Get the Python development headers
-    sudo('apt-get install -y python%s-dev' % python_version)
+    sudo('apt-get install -y python%s-dev' % ds.python_version)
     # Get required libraries for uWSGI
     sudo('apt-get install -y libpcre3-dev libssl-dev')
     # Get postgres development headers
-    sudo('apt-get install -y postgresql-server-dev-%s' % postgres_version)
+    sudo('apt-get install -y postgresql-server-dev-%s' % ds.postgres_version)
     # Get the scipy prequisites
     sudo('apt-get install -y gfortran libopenblas-dev liblapack-dev')
     # Get the matplotlib prequisites
@@ -342,71 +305,69 @@ def install_python():
     
     # Make a virtual environment for the user and activate it
     sudo('mkdir -p /var/venv')
+    sudo('chown %s:www-data /var/venv' % ds.username_main)
     with cd('/var/venv'):
-        sudo('virtualenv --python=python%s %s' % (python_version, domain))
-        sudo('chown -R %s:www-data .' % username_main)
-        sudo('chmod -R 750 .')
+        sudo('virtualenv --python=python%s %s' % (ds.python_version, ds.domain), user=ds.username_main, group='www-data')
     
     # Install python packages
-        python_env = 'source %s/bin/activate && ' % domain
-        run(python_env + 'pip install django')
-        run(python_env + 'pip install uwsgi')
-        run(python_env + 'pip install psycopg2')
-        run(python_env + 'pip install south')
-        run(python_env + 'pip install numpy')
-        run(python_env + 'pip install scipy')
-        run(python_env + 'pip install matplotlib')
-    
-    # Start a Django Project
-    #run('mkdir -p ~/workspace/%s' % domain)
-    #with cd('~/workspace/%s' % domain):
-    #    run(python_env + 'django-admin.py startproject %s' %  app_name)
+        python_env = 'source %s/bin/activate && ' % ds.domain
+        sudo(python_env + 'pip install django', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install uwsgi', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install psycopg2', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install south', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
+        sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
         
     # Create Upstart file to run uWSGI
     upload_config('/etc/init', 'uwsgi.conf', {
-        'app_name': app_name,
-        'domain': domain,
+        'app_name': ds.app_name,
+        'domain': ds.domain,
     })
     
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def configure_django_workspace():
     
-    print("Configuring Django")
+    print("Configuring local workspace at /home/%s/workspace/%s" % (ds.username_main, ds.domain))
     
     # Configure app directory and make appropriate files and sub directories
-    python_env = 'source /var/venv/%s/bin/activate && ' % domain
-    with cd('/home/%s/workspace/%s' % (username_main, domain)):
+    python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
+    run('mkdir -p workspace/%s' % ds.domain)
+    with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
+        run(python_env + 'django-admin.py startproject %s' % ds.app_name)
+        
         upload_config('.', '.gitignore', {
-            'app_name': app_name,
-        })
+            'app_name': ds.app_name,
+        }, user=ds.username_main)
         run(python_env + 'pip freeze >> requirements.txt') # requirements file
         
         # Upload new django config file
-        password_email = random_password('MAIL USER')
-        upload_config(app_name, 'settings.py', {
-            'domain': domain,
-            
-        })
+        upload_config('%s/%s' % (ds.app_name, ds.app_name), 'settings.py', {
+            'domain': ds.domain,
+        }, user=ds.username_main)
     
         # Set up secrets.py file and change ownership to root
-        put('config/secrets_template.py', '%s/%s/secrets_template.py' % (app_name, app_name))
-        upload_config(app_name, 'secrets_template.py', {
+        password_email = random_password('MAIL USER')
+        put('config/secrets_template.py', '%s/%s/secrets_template.py' % (ds.app_name, ds.app_name))
+        upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
             'secret_key': random_password('DJANGO TEST SECRETKEY',80,120),
             'debug': 'True',
             'template_debug': 'True',
-            'django_db_name': django_db_test_name,
-            'django_db_user': django_db_test_user,
+            'django_db_name': ds.django_db_test_name,
+            'django_db_user': ds.django_db_test_user,
             'django_db_pwd': random_password('DJANGO TEST DATABASE'),
-            'username_email': username_email,
+            'username_email': ds.username_email,
             'password_email': random_password('MAIL USER'),
-        }, rename="secrets.py", user=username_main, permissions='600')
+        }, rename="secrets.py", user=ds.username_main, permissions='600')
         
         # Sync the database
-        run(python_env + 'python manage.py syncdb')
+        run(python_env + 'python %s/manage.py syncdb' % ds.app_name)
         #run(python_env + 'python manage.py schemamigration %s --initial' % app_name)
         #run(python_env + 'python manage.py migrate %s' % app_name)
         
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_repo():
     '''
     Sets up a git repository where the website code can live and be deployed from
@@ -418,69 +379,76 @@ def setup_repo():
     sudo('apt-get -y install git')
     
     # Set up a directory
-    sudo('mkdir -p /home/git/%s.git' % domain, user='git')
-    with cd('/home/git/%s.git' % domain):
+    sudo('mkdir -p /home/git/%s.git' % ds.domain, user='git')
+    with cd('/home/git/%s.git' % ds.domain):
         # Set up repository
         sudo('git --bare init', user='git')
         
     # Push to the git repository
-    with cd('/home/%s/workspace/%s' % (username_main, domain)):
+    with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
         run('git init')
-        run('git config --global user.email "%s"' % email_address_webmaster)
-        run('git config --global user.name "%s"' % username_main)
+        run('git config --global user.email "%s"' % ds.email_address_webmaster)
+        run('git config --global user.name "%s"' % ds.username_main)
         run('git init')
         run('git add .')
         run('git commit -m "initial commit"')
-        run('git remote add origin git@localhost:/home/git/%s.git' % domain)
+        run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
         run('git push origin master')
         
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_production_code():
     '''
     Sets up production code on the server
     '''
+    
+    print("Deploying production code at /var/www/%s" % ds.domain)
+    
     # Deploy to webserver domain (via tutorial at 
     # http://grimoire.ca/git/stop-using-git-pull-to-deploy)
-    with cd('/var/www/%s' % domain):
-        sudo('git init', user='www-data')
-        sudo('git remote add origin git@localhost:/home/git/%s.git' % domain, user='www-data')
-        run('git fetch --all', user='www-data')
-        run('git checkout --force "origin/master"', user='www-data')
+    sudo('mkdir -p /var/www/%s' % ds.domain)
+    sudo('chown -R %s:www-data /var/www' % ds.username_main)
+    with cd('/var/www/%s' % ds.domain):
+        sudo('git init', user=ds.username_main, group='www-data')
+        sudo('git remote add origin git@localhost:/home/git/%s.git' % ds.domain, user=ds.username_main, group='www-data')
+        sudo('git fetch --all', user=ds.username_main, group='www-data')
+        sudo('git checkout --force "origin/master"', user=ds.username_main, group='www-data')
         
         # Add production secrets file
-        upload_config('%s/%s' % (app_name, app_name), 'secrets_template.py', {
+        upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
             'secret_key': random_password('DJANGO SECRETKEY',80,120),
             'debug': 'False',
             'template_debug': 'False',
-            'django_db_name': django_db_name,
-            'django_db_user': django_db_user,
+            'django_db_name': ds.django_db_name,
+            'django_db_user': ds.django_db_user,
             'django_db_pwd': random_password('DJANGO DATABASE'),
-            'username_email': username_email,
+            'username_email': ds.username_email,
             'password_email': random_password('MAIL USER'),
-        }, rename="secrets.py", user='www-data', permissions='600')
+        }, rename="secrets.py", user=ds.username_main, group='www-data', permissions='640')
         
         # Create a static folder
-        sudo('mkdir static', user='www-data')
+        sudo('mkdir static', user=ds.username_main, group='www-data')
         
-        python_env = 'source /var/venv/%s/bin/activate && ' % domain
+        python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
         
         # Syncdb
-        sudo(python_env + 'python %s/manage.py syncdb' % domain, user='www-data')
+        sudo(python_env + 'python %s/manage.py syncdb' % ds.app_name, user=ds.username_main, group='www-data')
         
         # Collect static
-        sudo(python_env + 'python %s/manage.py collectstatic' % domain, user='www-data')
+        sudo(python_env + 'python %s/manage.py collectstatic' % ds.app_name, user=ds.username_main, group='www-data')
         
-@hosts('%s@%s' % (username_main, ip_address))
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_bash_aliases():
         '''
         Sets up useful bash aliases for the main user
         '''
-        pass
-        #TODO: enter code
-        
+        upload_config('.', '.profile', {
+            'domain': ds.domain,
+            'username_main': ds.username_main,
+            'app_name': ds.app_name,
+        }, user=ds.username_main)
     
 # Helper functions
-def upload_config(upload_location, local_file, values, rename=None, user='root', permissions='640'):
+def upload_config(upload_location, local_file, values, rename=None, user='root', group=None, permissions='644'):
     '''
     Creates a backup of the original file on the server, fills in the given
     template and then uploads it to the desired location.
@@ -489,17 +457,24 @@ def upload_config(upload_location, local_file, values, rename=None, user='root',
         external_file = rename
     else:
         external_file = local_file
+        
+    if group == None:
+        group = user
     
+    # Create and upload a configuration file
     sudo('mv %s/%s %s/%s.backup' % (upload_location, external_file, upload_location, external_file), warn_only=True)
     template = template_env.get_template(local_file)
     file = template.render(values)
     with open('tmp/%s' % external_file, 'wb') as fh:
         fh.write(file)
     put('tmp/%s' % external_file, '~')
-    sudo('mv ~/%s %s' % (external_file, upload_location))
-    sudo('chown %s:%s %s/%s' % (user, user, upload_location, external_file))
+    sudo('mv ~/%s %s' % (external_file, upload_location), warn_only=True)
+    sudo('chown %s:%s %s/%s' % (user, group, upload_location, external_file))
     sudo('chmod %s %s/%s' % (permissions, upload_location, external_file))
-    local('rm tmp/%s' % external_file)
+    
+    # remove the temp file if needed
+    if ds.remove_temp_files:
+        local('rm tmp/%s' % external_file)
     
 def random_password(description, min_chars=10, max_chars=20):
     '''
@@ -532,3 +507,9 @@ def random_password(description, min_chars=10, max_chars=20):
         fh.close()
 
         return password
+    
+def get_host():
+    '''
+    Utility function get get the current operating user
+    '''
+    return env.host_string.split('@')[0]

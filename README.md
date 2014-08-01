@@ -4,7 +4,16 @@ Ubuntu14LTS-SciServer
 _Fabric file for the deployment of a fully capable web server on an 
 Ubuntu 14.04 LTS machine._
 
-## Requirements
+## USE
+1. Insure that you have a public ssh key at ~/.ssh/id_rsa.pub
+2. Make a copy of deploy\_settings\_template.py in deploy\_settings.py and put in the appropriate server settings
+3. Install the requirements listed below
+4. run "fab full_setup" to setup server
+5. Wait for restart
+6. run "fab full_deploy" to configures server and install pakages.
+7. Enjoy!
+
+## REQUIREMENTS
 - fabric
 - jinja2
 
@@ -17,6 +26,7 @@ user account and a migration ready connection to a PostgreSQL database
     - Numpy
     - Scipy
     - Pandas
+    - Sympy
     - Matplotlib
     - psycopg2
     - South (depreciated with Django 1.7)
@@ -45,7 +55,18 @@ user account and a migration ready connection to a PostgreSQL database
 - https with self signed ssl cert (optional)
 
 ### Utilities
-- Setup alias for virtualenv "loadenv"
+- Alias for one time run in virtualenv "runenv"
+- Alias for loading virtualenv "loadenv"
+- Alias to run the test server on port 8080 "runtestserver"
+- Varios goto-* aliases to move around filesystem
+    - (goto-)env: virtualenv root
+    - www: web root directory
+    - live: production code root
+    - wspc: on-server workspace
+    - repo: git repository
+- function to properly install a python package "installpypkg"
+- function to deploy repository head to live "livedeploy"
+- function to migrate the production database "migrateproddb"
 
 ## ADDITIONAL MANUAL DEPLOYMENT STEPS
 

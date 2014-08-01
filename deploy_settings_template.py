@@ -17,3 +17,4 @@ postgres_version = '9.3'
 password_login = 'yes'
 use_https = True
 local_test_db = True
+remove_temp_files = True

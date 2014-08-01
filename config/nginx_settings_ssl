@@ -17,8 +17,8 @@ server {
     ssl_protocols       SSLv3 TLSv1 TLSv1.1 TLSv1.2;
     ssl_ciphers         HIGH:!aNULL:!MD5;
     charset             utf-8;
-    access_log /var/log/{{domain}}/access.log;
-    error_log /var/log/{{domain}}/error.log;
+    access_log /var/log/{{domain}}/nginx_access.log;
+    error_log /var/log/{{domain}}/nginx_error.log;
     
     location / {
         uwsgi_pass  django;
@@ -28,6 +28,6 @@ server {
     }
     
     location /static {
-        root /var/www/{{domain}}/{{app_name}}/;
+        root /var/www;
     }
 }
