@@ -1,7 +1,7 @@
 Ubuntu14LTS-SciServer
 =====================
 
-_Fabric file for the deployment of a fully capable web server on an 
+_Fabric file for the deployment of a fully capable scientific web server on an 
 Ubuntu 14.04 LTS machine._
 
 ## USE
