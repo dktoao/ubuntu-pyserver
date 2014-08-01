@@ -80,8 +80,8 @@ application name
 1. Update the DNS DKIM records with the contents of info/dkim.public.key
 2. Update the DNS SPF records to show send ip addresses
 3. After running create a local repository and connect it to remote 
-git@{ip_address}:/{repository_root}/{domain name}.git
+git@{ip\_address}:~/{domain\_name}.git
 4. Create a local secrets.py file 
 5. Tweak the values in /etc/init/uwsgi.conf to match server specs
-6. Replace the self signed certificates and keys at /etc/cert/ to a non self-signed 
+6. Replace the self signed certificates and keys at /etc/nginx/ to a non self-signed 
 certificate
