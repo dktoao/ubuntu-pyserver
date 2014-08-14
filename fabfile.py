@@ -123,7 +123,7 @@ def setup_users():
     # Change ownership and permissions for uploaded file
     run('chown -R git:git /home/git/.ssh')
     run('chmod 500 /home/git/.ssh')
-    run('chmod 400 /home/git/.ssh/authorized_keys')
+    run('chmod 600 /home/git/.ssh/authorized_keys')
     
 @hosts('root@%s' % ds.ip_address)
 def setup_firewall():
