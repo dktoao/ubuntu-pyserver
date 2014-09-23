@@ -8,9 +8,10 @@ deploy_settings.py
 passwords.json
 dkim.public.key
 
-# c9 Files
+# IDE files
 .c9/
+/.idea/
 
 # Temporary files
 /tmp/
-!/tmp/tmp.txt
+/tmp/tmp.txt

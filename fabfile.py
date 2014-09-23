@@ -9,8 +9,7 @@ Author: Daniel Kuntz
 import deploy_settings as ds
 
 # Imports
-from fabric.api import run, get, put, env, sudo, hosts, local
-from fabric.operations import reboot
+from fabric.api import run, get, put, env, sudo, hosts, local, settings
 from fabric.context_managers import cd
 from jinja2 import Environment, FileSystemLoader
 from string import ascii_letters, digits
@@ -20,11 +19,12 @@ import json
 # Set up Jinja environment
 template_env = Environment(loader=FileSystemLoader('config'))
 
+
 @hosts('root@%s' % ds.ip_address)
 def full_setup():
-    '''
+    """
     Runs all root deployment scripts
-    '''
+    """
     # Initial Setup
     setup_hosts()
     upgrade()
@@ -33,15 +33,16 @@ def full_setup():
     setup_fail2ban()
     remove_root_login()
     restart()
-    
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def full_deploy():
-    '''
+    """
     Runs all primary user deployment scripts
-    '''
+    """
     # Advanced Setup
     install_postgres()
-    install_exim()
+    #install_exim()
     install_nginx()
     install_python()
     configure_django_workspace()
@@ -49,14 +50,13 @@ def full_deploy():
     setup_production_code()
     setup_bash_aliases()
     restart()
-    
+
+
 @hosts('root@%s' % ds.ip_address)
 def setup_hosts():
-    '''
+    """
     Set up host configurations
-    '''
-    
-    print("Setting up basic settings:")
+    """
     
     # Set the hostname and mailname
     run('echo "%s" > /etc/hostname' % (ds.server_name + "." + ds.domain))
@@ -69,24 +69,24 @@ def setup_hosts():
         'domain': ds.domain,
         'ip_address': ds.ip_address,
     })
-    
+
+
 @hosts('root@%s' % ds.ip_address)
 def upgrade():
-    '''
+    """
     Upgrade server software
-    '''
-    print("Upgrading server with latest software")
+    """
     
     #Update Repository
     run('apt-get update')
     run('apt-get -y upgrade')
-    
+
+
 @hosts('root@%s' % ds.ip_address)
 def setup_users():
-    '''
+    """
     Set up users and groups with super user and rsa key access to server
-    '''
-    print("Setting up users and access")
+    """
     
     #Create super user
     run('adduser --gecos "" %s' % ds.username_main)
@@ -124,13 +124,13 @@ def setup_users():
     run('chown -R git:git /home/git/.ssh')
     run('chmod 500 /home/git/.ssh')
     run('chmod 600 /home/git/.ssh/authorized_keys')
-    
+
+
 @hosts('root@%s' % ds.ip_address)
 def setup_firewall():
-    '''
+    """
     Setup iptables firewall with basic security settings
-    '''
-    print("Setting up basic firewall")
+    """
     
     # Updload firewall rules file
     put('config/iptables.firewall.rules', '/etc')
@@ -139,46 +139,49 @@ def setup_firewall():
     # Load startup file
     put('config/firewall', '/etc/network/if-pre-up.d')
     run('chmod +x /etc/network/if-pre-up.d/firewall')
-    
+
+
 @hosts('root@%s' % ds.ip_address)
 def setup_fail2ban():
-    '''
+    """
     Install and setup fail2ban software
-    '''
-    print("Installing fail2ban")
-    
-    run('apt-get install -y fail2ban')
-    
+    """
+
+    install_software(['fail2ban'], root=True)
+
+
 @hosts('root@%s' % ds.ip_address)
 def remove_root_login():
-    '''
+    """
     Removing ability to log-in as root and set password login ability
-    '''
-    
-    print('Diabling root login')
+    """
     
     upload_config('/etc/ssh', 'sshd_config', {
         'password_login': ds.password_login,
     })
 
+
 @hosts('root@%s' % ds.ip_address)
 def restart():
-    '''
+    """
     Restart the server
-    '''
-    print('Restarting the server')
+    """
     #reboot()
     sudo('reboot')
-    
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_postgres():
-    '''
+    """
     Install and configure postgres with a user for Django
-    '''
-    print('Installing/Configuring PostgreSQL server')
+    """
     
     # Install postgres
-    sudo('apt-get install -y postgresql-%s postgresql-contrib-%s' %(ds.postgres_version, ds.postgres_version))
+    install_software([
+        'postgresql-%s' % ds.postgres_version,
+        'postgresql-contrib-%s' % ds.postgres_version,
+        'postgre-server-dev-%s' % ds.postgres_version,
+    ])
     # Install the adminpack extension
     sudo('psql -c "CREATE EXTENSION adminpack"', user='postgres')
     # Create a django database user
@@ -196,17 +199,44 @@ def install_postgres():
     })
     # Restart the postgres server
     sudo('service postgresql restart')
-    
+
+
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
+def install_mail_server():
+    """
+    Installs and configures the postfix SMTP server and other components
+    required for email
+    """
+
+    # Set the initial configuration options for postfix
+    sudo('debconf-set-selections <<< "postfix postfix/mailname string %s"' % ds.domain)
+    sudo('debconf-set-selections <<< "postfix postfix/main_mailer_type string \'Internet Site\'"')
+
+    # Install the required software
+    install_software(['postfix'])
+
+    # Change the config file
+    upload_config('/etc/postfix', 'main.cf', {
+        'server_name': ds.server_name,
+        'domain': ds.domain,
+    })
+
+    # START HERE
+
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_exim():
-    '''
-    Install exim4 mailer in a send only configuration
-    '''
-    
-    print('Installing email system')
+    """
+    Install exim4 mailer in a send only configuration.  Can be used as an alternate to
+    postfix.
+    """
     
     # install the system
-    sudo('apt-get install -y exim4-daemon-light mailutils')
+    install_software([
+        'exim4-daemon-light',
+        'mailutils',
+    ])
     # Initial Setup of Exim
     upload_config('/etc/exim4', 'update-exim4.conf.conf', {
         'domain': ds.domain,
@@ -242,16 +272,15 @@ def install_exim():
     sudo('update-exim4.conf')
     sudo('service exim4 restart')
 
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_nginx():
-    '''
+    """
     Installs and configures nginx server
-    '''
-    
-    print('Installing and configuring nginx')
+    """
     
     # Install server software from repository
-    sudo('apt-get install -y nginx-full')
+    install_software(['nginx-full'])
     
     # Create directory for nginx logs
     sudo('mkdir -p /var/log/%s' % ds.domain)
@@ -281,27 +310,26 @@ def install_nginx():
     # enable the site
     sudo('rm /etc/nginx/sites-enabled/default')
     sudo('ln -s /etc/nginx/sites-available/%s /etc/nginx/sites-enabled/%s' % (ds.domain, ds.domain))
-    
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_python():
-    '''
+    """
     Install Python and desired packages in a virtualenv at /var/venv
-    '''
+    """
     
-    print('Installing python virtualenv')
-    
-    # Get the Python development headers
-    sudo('apt-get install -y python%s-dev' % ds.python_version)
-    # Get required libraries for uWSGI
-    sudo('apt-get install -y libpcre3-dev libssl-dev')
-    # Get postgres development headers
-    sudo('apt-get install -y postgresql-server-dev-%s' % ds.postgres_version)
-    # Get the scipy prequisites
-    sudo('apt-get install -y gfortran libopenblas-dev liblapack-dev')
-    # Get the matplotlib prequisites
-    sudo('apt-get install -y libfreetype6-dev libxft-dev')
-    # Get virtualenv
-    sudo('apt-get install -y python-virtualenv')
+    # Get the required software
+    install_software([
+        'python%s-dev' % ds.python_version,
+        'libpcre3-dev',
+        'libssl-dev',
+        'gfortran',
+        'libopenblas-dev',
+        'liblapack-dev',
+        'libfreetype6-dev',
+        'libxft-dev',
+        'python-virtualenv'
+    ])
     
     # Make a virtual environment for the user and activate it
     sudo('mkdir -p /var/venv')
@@ -326,11 +354,10 @@ def install_python():
         'app_name': ds.app_name,
         'domain': ds.domain,
     })
-    
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def configure_django_workspace():
-    
-    print("Configuring local workspace at /home/%s/workspace/%s" % (ds.username_main, ds.domain))
     
     # Configure app directory and make appropriate files and sub directories
     python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
@@ -366,17 +393,16 @@ def configure_django_workspace():
         run(python_env + 'python %s/manage.py syncdb' % ds.app_name)
         #run(python_env + 'python manage.py schemamigration %s --initial' % app_name)
         #run(python_env + 'python manage.py migrate %s' % app_name)
-        
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_repo():
-    '''
+    """
     Sets up a git repository where the website code can live and be deployed from
-    '''
-    
-    print("Setting up a git repository for website code")
+    """
     
     # Install git
-    sudo('apt-get -y install git')
+    install_software(['git'])
     
     # Set up a directory
     sudo('mkdir -p /home/git/%s.git' % ds.domain, user='git')
@@ -394,14 +420,13 @@ def setup_repo():
         run('git commit -m "initial commit"')
         run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
         run('git push origin master')
-        
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_production_code():
-    '''
+    """
     Sets up production code on the server
-    '''
-    
-    print("Deploying production code at /var/www/%s" % ds.domain)
+    """
     
     # Deploy to webserver domain (via tutorial at 
     # http://grimoire.ca/git/stop-using-git-pull-to-deploy)
@@ -435,24 +460,26 @@ def setup_production_code():
         
         # Collect static
         sudo(python_env + 'python %s/manage.py collectstatic' % ds.app_name, user=ds.username_main, group='www-data')
-        
+
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_bash_aliases():
-        '''
-        Sets up useful bash aliases for the main user
-        '''
-        upload_config('.', '.profile', {
-            'domain': ds.domain,
-            'username_main': ds.username_main,
-            'app_name': ds.app_name,
-        }, user=ds.username_main)
-    
+    """
+    Sets up useful bash aliases for the main user
+    """
+    upload_config('.', '.profile', {
+        'domain': ds.domain,
+        'username_main': ds.username_main,
+        'app_name': ds.app_name,
+    }, user=ds.username_main)
+
+
 # Helper functions
 def upload_config(upload_location, local_file, values, rename=None, user='root', group=None, permissions='644'):
-    '''
+    """
     Creates a backup of the original file on the server, fills in the given
     template and then uploads it to the desired location.
-    '''
+    """
     if rename != None:
         external_file = rename
     else:
@@ -475,12 +502,13 @@ def upload_config(upload_location, local_file, values, rename=None, user='root',
     # remove the temp file if needed
     if ds.remove_temp_files:
         local('rm tmp/%s' % external_file)
-    
+
+
 def random_password(description, min_chars=10, max_chars=20):
-    '''
+    """
     Creates a random password from uppercase letters, lowercase letters and
     digits with a length between min_chars and max_chars
-    '''
+    """
     
     # Open saved passwords file or create new one.
     try:
@@ -507,9 +535,45 @@ def random_password(description, min_chars=10, max_chars=20):
         fh.close()
 
         return password
-    
+
+
+def install_software(pkg_list, root=False):
+    """
+    Installs packages in the pkg_list
+
+    :param pkg_list: packages to be installed
+    :type pkg_list: list
+    :param root: is the user installing the program root?
+    :type root: boolean
+    """
+
+    # Check to see if packages are already installed
+    install_pkgs = []
+    for pkg in pkg_list:
+        cmd_f = 'dpkg-query -l "%s" | grep -q ^.i'
+        cmd = cmd_f % pkg
+        with settings(warn_only=True):
+            result = run(cmd)
+            is_installed = result.succeeded
+        if not is_installed:
+            install_pkgs.append(pkg)
+
+    # Install each package
+    if install_pkgs:
+        install_str = ' '.join(install_pkgs)
+        if root:
+            run('apt-get install -y %s' % install_str)
+        else:
+            sudo('apt-get install -y %s' % install_str)
+
+
 def get_host():
-    '''
+    """
     Utility function get get the current operating user
-    '''
+    """
     return env.host_string.split('@')[0]
+
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
+def temp():
+
+    get('/etc/postfix/main.cf')
