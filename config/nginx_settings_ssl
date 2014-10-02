@@ -12,8 +12,8 @@ server {
     listen              443 ssl;
     server_name         .{{domain}};
     keepalive_timeout   70;
-    ssl_certificate     /etc/nginx/https.cert;
-    ssl_certificate_key /etc/nginx/https.key;
+    ssl_certificate     /etc/ssl/universal/certs/server.crt;
+    ssl_certificate_key /etc/ssl/universal/private/private.key;
     ssl_protocols       SSLv3 TLSv1 TLSv1.1 TLSv1.2;
     ssl_ciphers         HIGH:!aNULL:!MD5;
     charset             utf-8;

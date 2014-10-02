@@ -10,7 +10,7 @@ import deploy_settings as ds
 
 # Imports
 from fabric.api import run, get, put, env, sudo, hosts, local, settings
-from fabric.context_managers import cd
+from fabric.context_managers import cd, lcd
 from jinja2 import Environment, FileSystemLoader
 from string import ascii_letters, digits
 from random import SystemRandom
@@ -42,12 +42,13 @@ def full_deploy():
     """
     # Advanced Setup
     install_postgres()
-    #install_exim()
+    install_exim()
     install_nginx()
     install_python()
-    configure_django_workspace()
-    setup_repo()
-    setup_production_code()
+    #TODO: Allow these functions to deploy a
+    #configure_django_workspace()
+    #setup_repo()
+    #setup_production_code()
     setup_bash_aliases()
     restart()
 
@@ -59,7 +60,7 @@ def setup_hosts():
     """
     
     # Set the hostname and mailname
-    run('echo "%s" > /etc/hostname' % (ds.server_name + "." + ds.domain))
+    run('echo "%s" > /etc/hostname' % ds.server_name)
     run('hostname -F /etc/hostname')
     run('echo "%s" > /etc/mailname' % ds.domain)
     
@@ -171,6 +172,39 @@ def restart():
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
+def make_ssl_keys():
+    """
+    Creates a security keys, certificates and a group with permissions
+    """
+    # Create directory for public certs
+    sudo('mkdir /etc/ssl/universal')
+    sudo('mkdir /etc/ssl/universal/private')
+    sudo('mkdir /etc/ssl/universal/certs')
+    sudo('mkdir /etc/ssl/universal/public')
+
+    # Create group for programs that need to access certificates
+    sudo('addgroup secured')
+
+    # Create keys and certificates needed for https, and email
+    sudo('openssl rsa -out private.key')
+    sudo('openssl rsa -in private.key -out public.key -pubout -outform PEM')
+    sudo('openssl req -new -key server.key -x509 -days 3650 -out server.csr')
+    sudo('openssl x509 -req -days 3650 -in server.csr -signkey private.key -out server.crt')
+
+    # Change access permissions for files
+    sudo('chown root:secured private.key public.key server.crt')
+    sudo('chmod 640 private.key public.key server.crt')
+
+    # Move files to ssl location
+    sudo('mv private.key /etc/ssl/universal/private/')
+    sudo('mv public.key /etc/ssl/universal/public/')
+    sudo('mv server.crt /etc/ssl/universal/certs/')
+
+    # Get the public key from the website
+    get('/etc/ssl/universal/public/public.key', local_path='info')
+
+
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_postgres():
     """
     Install and configure postgres with a user for Django
@@ -180,7 +214,7 @@ def install_postgres():
     install_software([
         'postgresql-%s' % ds.postgres_version,
         'postgresql-contrib-%s' % ds.postgres_version,
-        'postgre-server-dev-%s' % ds.postgres_version,
+        'postgresql-server-dev-%s' % ds.postgres_version,
     ])
     # Install the adminpack extension
     sudo('psql -c "CREATE EXTENSION adminpack"', user='postgres')
@@ -208,23 +242,21 @@ def install_mail_server():
     required for email
     """
 
-    # Set the initial configuration options for postfix
+    # Set the initial configuration options for installation
+    # Postfix
     sudo('debconf-set-selections <<< "postfix postfix/mailname string %s"' % ds.domain)
     sudo('debconf-set-selections <<< "postfix postfix/main_mailer_type string \'Internet Site\'"')
 
     # Install the required software
-    install_software(['postfix'])
+    install_software(['postfix', 'mailutils', 'courier-pop', 'courier-imap'])
 
-    # Change the config file
+    # Change the postfix config file
     upload_config('/etc/postfix', 'main.cf', {
         'server_name': ds.server_name,
         'domain': ds.domain,
     })
 
-    # START HERE
-
-
-
+''' TODO: Remove this
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_exim():
     """
@@ -271,7 +303,7 @@ def install_exim():
     # Restart exim
     sudo('update-exim4.conf')
     sudo('service exim4 restart')
-
+'''
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_nginx():
@@ -287,15 +319,7 @@ def install_nginx():
     
     # Create a self-signed SSL certificate if required
     if ds.use_https:
-        with cd('/etc/nginx'):
-            sudo('openssl genrsa -out https.key 1024')
-            sudo('openssl req -new -key https.key -out https.csr')
-            sudo('openssl x509 -req -days 365 -in https.csr -signkey https.key -out https.cert')
-            
-            # Change ownership and priveleges
-            sudo('chown www-data:www-data https.key https.cert https.csr')
-            sudo('chmod 400 https.key https.cert https.csr')
-        
+        sudo('usermod -G secured www-data')
         nginx_config_file = 'nginx_settings_ssl'
         
     else:
@@ -339,15 +363,21 @@ def install_python():
     
     # Install python packages
         python_env = 'source %s/bin/activate && ' % ds.domain
-        sudo(python_env + 'pip install django', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install uwsgi', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install psycopg2', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install south', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
-        sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
+        if ds.python_req_file:
+            put(ds.python_req_file, '~')
+            sudo(python_env + 'pip install -r %s' % ds.python_req_file)
+
+        else:
+            sudo(python_env + 'pip install django', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install uwsgi', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install psycopg2', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install south', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
+            #sudo(python_env + 'pip install django-treebeard', user=ds.username_main, group='www-data')
         
     # Create Upstart file to run uWSGI
     upload_config('/etc/init', 'uwsgi.conf', {
@@ -362,21 +392,23 @@ def configure_django_workspace():
     # Configure app directory and make appropriate files and sub directories
     python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
     run('mkdir -p workspace/%s' % ds.domain)
+
     with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
-        run(python_env + 'django-admin.py startproject %s' % ds.app_name)
-        
-        upload_config('.', '.gitignore', {
-            'app_name': ds.app_name,
-        }, user=ds.username_main)
-        run(python_env + 'pip freeze >> requirements.txt') # requirements file
-        
-        # Upload new django config file
-        upload_config('%s/%s' % (ds.app_name, ds.app_name), 'settings.py', {
-            'domain': ds.domain,
-        }, user=ds.username_main)
-    
+        if ds.make_new_project:
+            run(python_env + 'django-admin.py startproject %s' % ds.app_name)
+
+            upload_config('.', '.gitignore', {
+                'app_name': ds.app_name,
+            }, user=ds.username_main)
+
+            run(python_env + 'pip freeze >> requirements.txt') # requirements file
+
+            # Upload new django config file
+            upload_config('%s/%s' % (ds.app_name, ds.app_name), 'settings.py', {
+                'domain': ds.domain,
+            }, user=ds.username_main)
+
         # Set up secrets.py file and change ownership to root
-        password_email = random_password('MAIL USER')
         put('config/secrets_template.py', '%s/%s/secrets_template.py' % (ds.app_name, ds.app_name))
         upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
             'secret_key': random_password('DJANGO TEST SECRETKEY',80,120),
@@ -388,11 +420,9 @@ def configure_django_workspace():
             'username_email': ds.username_email,
             'password_email': random_password('MAIL USER'),
         }, rename="secrets.py", user=ds.username_main, permissions='600')
-        
+
         # Sync the database
         run(python_env + 'python %s/manage.py syncdb' % ds.app_name)
-        #run(python_env + 'python manage.py schemamigration %s --initial' % app_name)
-        #run(python_env + 'python manage.py migrate %s' % app_name)
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -400,7 +430,6 @@ def setup_repo():
     """
     Sets up a git repository where the website code can live and be deployed from
     """
-    
     # Install git
     install_software(['git'])
     
@@ -411,15 +440,21 @@ def setup_repo():
         sudo('git --bare init', user='git')
         
     # Push to the git repository
-    with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
-        run('git init')
-        run('git config --global user.email "%s"' % ds.email_address_webmaster)
-        run('git config --global user.name "%s"' % ds.username_main)
-        run('git init')
-        run('git add .')
-        run('git commit -m "initial commit"')
-        run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
-        run('git push origin master')
+    if ds.push_existing_repo:
+        with lcd(ds.existing_repo_location):
+            local('git remote add %s git@%s:/home/git/%s.git' % (ds.server_name, ds.domain, ds.domain))
+            local('git push origin master')
+
+    else:
+        with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
+            run('git init')
+            run('git config --global user.email "%s"' % ds.email_address_webmaster)
+            run('git config --global user.name "%s"' % ds.username_main)
+            run('git init')
+            run('git add .')
+            run('git commit -m "initial commit"')
+            run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
+            run('git push origin master')
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))

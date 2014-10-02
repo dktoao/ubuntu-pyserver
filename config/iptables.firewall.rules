@@ -14,6 +14,18 @@
 -A INPUT -p tcp --dport 80 -j ACCEPT
 -A INPUT -p tcp --dport 443 -j ACCEPT
 
+# Open ports for email use
+# SMTP
+-A INPUT -p tcp --dport 25 -j ACCEPT
+-A INPUT -p tcp --dport 465 -j ACCEPT
+-A INPUT -p tcp --dport 587 -j ACCEPT
+# POP
+-A INPUT -p tcp --dport 110 -j ACCEPT
+-A INPUT -p tcp --dport 995 -j ACCEPT
+# IMAP
+-A INPUT -p tcp --dport 143 -j ACCEPT
+-A INPUT -p tcp --dport 993 -j ACCEPT
+
 # Allow HTTP over port 8080 for testing purposes
 -A INPUT -p tcp --dport 8080 -j ACCEPT
 
