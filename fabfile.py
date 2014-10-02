@@ -41,11 +41,11 @@ def full_deploy():
     Runs all primary user deployment scripts
     """
     # Advanced Setup
-    install_postgres()
-    install_exim()
+    make_ssl_keys()
+    #install_postgres()
+    install_postfix()
     install_nginx()
-    install_python()
-    #TODO: Allow these functions to deploy a
+    #install_python()
     #configure_django_workspace()
     #setup_repo()
     #setup_production_code()
@@ -101,7 +101,7 @@ def setup_users():
         # Create own private key
         run('ssh-keygen -t rsa -C "%s@%s" -f id_rsa -N ""' % (ds.username_main, ds.server_name))
         # Change ownership and permissions for uploaded file
-        run('chown -R %s:%s .'% (ds.username_main, ds.username_main))
+        run('chown -R %s:%s .' % (ds.username_main, ds.username_main))
         run('chmod 500 .')
         run('chmod 600 authorized_keys')
         run('chmod 600 id_rsa')
@@ -219,12 +219,14 @@ def install_postgres():
     # Install the adminpack extension
     sudo('psql -c "CREATE EXTENSION adminpack"', user='postgres')
     # Create a django database user
-    sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' % (ds.django_db_user, random_password('DJANGO DATABASE')), user='postgres')
+    sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' %
+         (ds.django_db_user, random_password('DJANGO DATABASE')), user='postgres')
     # Create a database for django to use
     sudo('createdb -O %s %s' % (ds.django_db_user, ds.django_db_name), user='postgres')
     # Create a test database and test user
     if ds.local_test_db:
-        sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' % (ds.django_db_test_user, random_password('DJANGO TEST DATABASE')), user='postgres')
+        sudo('psql -c "CREATE USER %s WITH PASSWORD \'%s\'"' %
+             (ds.django_db_test_user, random_password('DJANGO TEST DATABASE')), user='postgres')
         sudo('createdb -O %s %s' % (ds.django_db_test_user, ds.django_db_test_name), user='postgres')
     # Update the postgres pg_hba.conf file
     upload_config('/etc/postgresql/%s/main' % ds.postgres_version, 'pg_hba.conf', {
@@ -236,7 +238,7 @@ def install_postgres():
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def install_mail_server():
+def install_postfix():
     """
     Installs and configures the postfix SMTP server and other components
     required for email
@@ -250,11 +252,17 @@ def install_mail_server():
     # Install the required software
     install_software(['postfix', 'mailutils', 'courier-pop', 'courier-imap'])
 
+    # Add postfix to the secured group
+    sudo('usermod -G secured postfix')
+
     # Change the postfix config file
     upload_config('/etc/postfix', 'main.cf', {
         'server_name': ds.server_name,
         'domain': ds.domain,
     })
+
+    # Restart postfix
+    sudo('service postfix restart')
 
 ''' TODO: Remove this
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -304,6 +312,7 @@ def install_exim():
     sudo('update-exim4.conf')
     sudo('service exim4 restart')
 '''
+
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_nginx():
@@ -359,7 +368,8 @@ def install_python():
     sudo('mkdir -p /var/venv')
     sudo('chown %s:www-data /var/venv' % ds.username_main)
     with cd('/var/venv'):
-        sudo('virtualenv --python=python%s %s' % (ds.python_version, ds.domain), user=ds.username_main, group='www-data')
+        sudo('virtualenv --python=python%s %s' %
+             (ds.python_version, ds.domain), user=ds.username_main, group='www-data')
     
     # Install python packages
         python_env = 'source %s/bin/activate && ' % ds.domain
@@ -401,7 +411,7 @@ def configure_django_workspace():
                 'app_name': ds.app_name,
             }, user=ds.username_main)
 
-            run(python_env + 'pip freeze >> requirements.txt') # requirements file
+            run(python_env + 'pip freeze >> requirements.txt')  # requirements file
 
             # Upload new django config file
             upload_config('%s/%s' % (ds.app_name, ds.app_name), 'settings.py', {
@@ -411,7 +421,7 @@ def configure_django_workspace():
         # Set up secrets.py file and change ownership to root
         put('config/secrets_template.py', '%s/%s/secrets_template.py' % (ds.app_name, ds.app_name))
         upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
-            'secret_key': random_password('DJANGO TEST SECRETKEY',80,120),
+            'secret_key': random_password('DJANGO TEST SECRETKEY', 80, 120),
             'debug': 'True',
             'template_debug': 'True',
             'django_db_name': ds.django_db_test_name,
@@ -469,13 +479,14 @@ def setup_production_code():
     sudo('chown -R %s:www-data /var/www' % ds.username_main)
     with cd('/var/www/%s' % ds.domain):
         sudo('git init', user=ds.username_main, group='www-data')
-        sudo('git remote add origin git@localhost:/home/git/%s.git' % ds.domain, user=ds.username_main, group='www-data')
+        sudo('git remote add origin git@localhost:/home/git/%s.git' %
+             ds.domain, user=ds.username_main, group='www-data')
         sudo('git fetch --all', user=ds.username_main, group='www-data')
         sudo('git checkout --force "origin/master"', user=ds.username_main, group='www-data')
         
         # Add production secrets file
         upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
-            'secret_key': random_password('DJANGO SECRETKEY',80,120),
+            'secret_key': random_password('DJANGO SECRETKEY', 80, 120),
             'debug': 'False',
             'template_debug': 'False',
             'django_db_name': ds.django_db_name,
@@ -515,20 +526,20 @@ def upload_config(upload_location, local_file, values, rename=None, user='root',
     Creates a backup of the original file on the server, fills in the given
     template and then uploads it to the desired location.
     """
-    if rename != None:
+    if rename is not None:
         external_file = rename
     else:
         external_file = local_file
         
-    if group == None:
+    if group is None:
         group = user
     
     # Create and upload a configuration file
     sudo('mv %s/%s %s/%s.backup' % (upload_location, external_file, upload_location, external_file), warn_only=True)
     template = template_env.get_template(local_file)
-    file = template.render(values)
+    config_file = template.render(values)
     with open('tmp/%s' % external_file, 'wb') as fh:
-        fh.write(file)
+        fh.write(config_file)
     put('tmp/%s' % external_file, '~')
     sudo('mv ~/%s %s' % (external_file, upload_location), warn_only=True)
     sudo('chown %s:%s %s/%s' % (user, group, upload_location, external_file))
@@ -607,8 +618,3 @@ def get_host():
     Utility function get get the current operating user
     """
     return env.host_string.split('@')[0]
-
-@hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def temp():
-
-    get('/etc/postfix/main.cf')
