@@ -49,7 +49,7 @@ def full_deploy():
     #configure_django_workspace()
     #setup_repo()
     #setup_production_code()
-    setup_bash_aliases()
+    #setup_bash_aliases()
     restart()
 
 
@@ -186,9 +186,9 @@ def make_ssl_keys():
     sudo('addgroup secured')
 
     # Create keys and certificates needed for https, and email
-    sudo('openssl rsa -out private.key')
+    sudo('openssl genrsa -out private.key 1024')
     sudo('openssl rsa -in private.key -out public.key -pubout -outform PEM')
-    sudo('openssl req -new -key server.key -x509 -days 3650 -out server.csr')
+    sudo('openssl req -new -key private.key -out server.csr')
     sudo('openssl x509 -req -days 3650 -in server.csr -signkey private.key -out server.crt')
 
     # Change access permissions for files
@@ -201,7 +201,8 @@ def make_ssl_keys():
     sudo('mv server.crt /etc/ssl/universal/certs/')
 
     # Get the public key from the website
-    get('/etc/ssl/universal/public/public.key', local_path='info')
+    # TODO: fix permission problems with this line
+    #get('/etc/ssl/universal/public/public.key', local_path='info')
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -248,6 +249,8 @@ def install_postfix():
     # Postfix
     sudo('debconf-set-selections <<< "postfix postfix/mailname string %s"' % ds.domain)
     sudo('debconf-set-selections <<< "postfix postfix/main_mailer_type string \'Internet Site\'"')
+    # TODO: add options for courier setup
+    # HERE
 
     # Install the required software
     install_software(['postfix', 'mailutils', 'courier-pop', 'courier-imap'])
