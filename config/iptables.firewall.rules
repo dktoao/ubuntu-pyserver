@@ -20,8 +20,8 @@
 -A INPUT -p tcp --dport 465 -j ACCEPT
 -A INPUT -p tcp --dport 587 -j ACCEPT
 # POP
--A INPUT -p tcp --dport 110 -j ACCEPT
--A INPUT -p tcp --dport 995 -j ACCEPT
+#-A INPUT -p tcp --dport 110 -j ACCEPT
+#-A INPUT -p tcp --dport 995 -j ACCEPT
 # IMAP
 -A INPUT -p tcp --dport 143 -j ACCEPT
 -A INPUT -p tcp --dport 993 -j ACCEPT

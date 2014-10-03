@@ -42,14 +42,14 @@ def full_deploy():
     """
     # Advanced Setup
     make_ssl_keys()
-    #install_postgres()
+    install_postgres()
     install_postfix()
     install_nginx()
-    #install_python()
-    #configure_django_workspace()
-    #setup_repo()
-    #setup_production_code()
-    #setup_bash_aliases()
+    install_python()
+    configure_django_workspace()
+    setup_repo()
+    setup_production_code()
+    setup_bash_aliases()
     restart()
 
 
@@ -249,72 +249,32 @@ def install_postfix():
     # Postfix
     sudo('debconf-set-selections <<< "postfix postfix/mailname string %s"' % ds.domain)
     sudo('debconf-set-selections <<< "postfix postfix/main_mailer_type string \'Internet Site\'"')
-    # TODO: add options for courier setup
-    # HERE
+    # Dovecot
+    sudo('debconf-set-selections <<< "dovecot-core dovecot-core/create-ssl-cert string false"')
 
     # Install the required software
-    install_software(['postfix', 'mailutils', 'courier-pop', 'courier-imap'])
+    install_software(['postfix', 'dovecot-imapd'])
 
-    # Add postfix to the secured group
+    # Add postfix and dovecot to the secured group
     sudo('usermod -G secured postfix')
+    sudo('usermod -G secured dovecot')
+    sudo('usermod -G secured dovenull')
 
-    # Change the postfix config file
+    # Configure Postfix
     upload_config('/etc/postfix', 'main.cf', {
-        'server_name': ds.server_name,
         'domain': ds.domain,
     })
+    upload_config('/etc/postfix', 'master.cf', {})
 
-    # Restart postfix
+    # Configure Dovecot
+    upload_config('/etc/dovecot/conf.d', '10-auth.conf', {})
+    upload_config('/etc/dovecot/conf.d', '10-mail.conf', {})
+    upload_config('/etc/dovecot/conf.d', '10-master.conf', {})
+    upload_config('/etc/dovecot/conf.d', '10-ssl.conf', {})
+
+    # Restart programs
+    sudo('service dovecot restart')
     sudo('service postfix restart')
-
-''' TODO: Remove this
-@hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def install_exim():
-    """
-    Install exim4 mailer in a send only configuration.  Can be used as an alternate to
-    postfix.
-    """
-    
-    # install the system
-    install_software([
-        'exim4-daemon-light',
-        'mailutils',
-    ])
-    # Initial Setup of Exim
-    upload_config('/etc/exim4', 'update-exim4.conf.conf', {
-        'domain': ds.domain,
-        'server_name': ds.server_name,
-    })
-    
-    # Set up a security certificate
-    with cd('/etc/exim4'):
-        # Generate the private key
-        sudo('openssl genrsa -out dkim.private.key 1024')
-        # Generate the private key
-        sudo('openssl rsa -in dkim.private.key -out dkim.public.key -pubout -outform PEM')
-        # Change ownership and privleges of the private key
-        sudo('chown root:Debian-exim dkim.private.key')
-        sudo('chmod 640 dkim.private.key')
-        # Download the public key
-        get('/etc/exim4/dkim.public.key', local_path='info')
-        
-    # Update Exim configuration to use DKIM signing
-    upload_config('/etc/exim4/conf.d/main', '00_local_settings', {
-        'domain': ds.domain,
-        'dkim_selector': ds.dkim_selector,
-    })
-    
-    # Configure email addresses for primary users
-    upload_config('/etc', 'email-addresses', {
-        'domain': ds.domain,
-        'username_main': ds.username_main,
-        'username_email': ds.username_email,
-    })
-    
-    # Restart exim
-    sudo('update-exim4.conf')
-    sudo('service exim4 restart')
-'''
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -621,3 +581,15 @@ def get_host():
     Utility function get get the current operating user
     """
     return env.host_string.split('@')[0]
+
+
+@hosts('root@%s' % ds.ip_address)
+def temp():
+    with cd('/etc/dovecot/conf.d/'):
+        get('10-auth.conf')
+        get('10-mail.conf')
+        get('10-master.conf')
+        get('10-ssl.conf')
+    with cd('/etc/postfix/'):
+        get('main.cf')
+        get('master.cf')
