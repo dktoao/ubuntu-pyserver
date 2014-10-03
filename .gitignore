@@ -6,7 +6,7 @@ deploy_settings.py
 
 # Deploy info
 passwords.json
-dkim.public.key
+public.key
 
 # IDE files
 .c9/

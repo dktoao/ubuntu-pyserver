@@ -9,6 +9,7 @@ Author: Daniel Kuntz
 import deploy_settings as ds
 
 # Imports
+from os import path
 from fabric.api import run, get, put, env, sudo, hosts, local, settings
 from fabric.context_managers import cd, lcd
 from jinja2 import Environment, FileSystemLoader
@@ -46,8 +47,8 @@ def full_deploy():
     install_mail_system()
     install_nginx()
     install_python()
-    configure_django_workspace()
     setup_repo()
+    configure_django_workspace()
     setup_production_code()
     setup_bash_aliases()
     restart()
@@ -191,6 +192,9 @@ def make_ssl_keys():
     sudo('openssl req -new -key private.key -out server.csr')
     sudo('openssl x509 -req -days 3650 -in server.csr -signkey private.key -out server.crt')
 
+    # Download a copy of the public key
+    get('public.key', local_path='info')
+
     # Change access permissions for files
     sudo('chown root:secured private.key public.key server.crt')
     sudo('chmod 640 private.key public.key server.crt')
@@ -199,10 +203,7 @@ def make_ssl_keys():
     sudo('mv private.key /etc/ssl/universal/private/')
     sudo('mv public.key /etc/ssl/universal/public/')
     sudo('mv server.crt /etc/ssl/universal/certs/')
-
-    # Get the public key from the website
-    # TODO: fix permission problems with this line
-    #get('/etc/ssl/universal/public/public.key', local_path='info')
+    sudo('mv server.csr /etc/ssl/universal/')
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -341,17 +342,17 @@ def install_python():
         python_env = 'source %s/bin/activate && ' % ds.domain
         if ds.python_req_file:
             put(ds.python_req_file, '~')
-            sudo(python_env + 'pip install -r %s' % ds.python_req_file)
+            sudo(python_env + 'pip install -r %s' % path.split(ds.python_req_file)[1])
 
         else:
             sudo(python_env + 'pip install django', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install uwsgi', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install psycopg2', user=ds.username_main, group='www-data')
-            sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
-            sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
-            sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
-            sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
-            sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
+            #sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
+            #sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
+            #sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
+            #sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
+            #sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
             #sudo(python_env + 'pip install django-treebeard', user=ds.username_main, group='www-data')
         
     # Create Upstart file to run uWSGI
@@ -366,7 +367,7 @@ def configure_django_workspace():
     
     # Configure app directory and make appropriate files and sub directories
     python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
-    run('mkdir -p workspace/%s' % ds.domain)
+    run('mkdir -p workspace/%s' % ds.domain, warn_only=True)
 
     with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
         if ds.make_new_project:
@@ -420,12 +421,20 @@ def setup_repo():
             local('git remote add %s git@%s:/home/git/%s.git' % (ds.server_name, ds.domain, ds.domain))
             local('git push origin master')
 
+        run('mkdir -p workspace/%s' % ds.domain)
+        with cd('workspace/%s' % ds.domain):
+            run('git init')
+            run('git config --global user.email "%s"' % ds.email_address_webmaster)
+            run('git config --global user.name "%s"' % ds.username_main)
+            run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
+            run('git pull origin master')
+
     else:
         with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
             run('git init')
             run('git config --global user.email "%s"' % ds.email_address_webmaster)
             run('git config --global user.name "%s"' % ds.username_main)
-            run('git init')
+            #run('git init')
             run('git add .')
             run('git commit -m "initial commit"')
             run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
