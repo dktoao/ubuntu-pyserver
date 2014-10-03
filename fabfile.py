@@ -1,5 +1,5 @@
 """
-Fabric file for the deployment of a fully capable web server on an 
+Fabric file for the deployment of a fully capable scientific web server on an
 Ubuntu 14.04 LTS machine.
     
 Author: Daniel Kuntz
@@ -43,7 +43,7 @@ def full_deploy():
     # Advanced Setup
     make_ssl_keys()
     install_postgres()
-    install_postfix()
+    install_mail_system()
     install_nginx()
     install_python()
     configure_django_workspace()
@@ -239,10 +239,13 @@ def install_postgres():
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def install_postfix():
+def install_mail_system():
     """
     Installs and configures the postfix SMTP server and other components
-    required for email
+    required for email.  A very special thanks to grawity on the StackOverflow
+    Super User boards, for the best simple email tutorial ever written.  I am sorry that
+    I don't have any commenting power on those boards or I would have thanked you profusely!
+    (http://superuser.com/questions/605521/the-simplest-way-to-set-up-a-secure-imap-email-server)
     """
 
     # Set the initial configuration options for installation
@@ -344,7 +347,6 @@ def install_python():
             sudo(python_env + 'pip install django', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install uwsgi', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install psycopg2', user=ds.username_main, group='www-data')
-            sudo(python_env + 'pip install south', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
@@ -581,15 +583,3 @@ def get_host():
     Utility function get get the current operating user
     """
     return env.host_string.split('@')[0]
-
-
-@hosts('root@%s' % ds.ip_address)
-def temp():
-    with cd('/etc/dovecot/conf.d/'):
-        get('10-auth.conf')
-        get('10-mail.conf')
-        get('10-master.conf')
-        get('10-ssl.conf')
-    with cd('/etc/postfix/'):
-        get('main.cf')
-        get('master.cf')
