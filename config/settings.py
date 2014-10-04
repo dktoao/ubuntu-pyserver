@@ -96,4 +96,4 @@ EMAIL_HOST_PASSWORD = secrets.MAIL_PASSWORD
 ALLOWED_HOSTS = ['.{{domain}}',
                  '.{{domain}}.', ]
 
-TEMPLATE_DIRS = [os.path.join(BASE_DIR, 'templates')].extend(secrets.ADDITIONAL_TEMPLATE_DIRS)
+TEMPLATE_DIRS = [os.path.join(BASE_DIR, 'templates')] + secrets.ADDITIONAL_TEMPLATE_DIRS

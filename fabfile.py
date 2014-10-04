@@ -10,7 +10,7 @@ import deploy_settings as ds
 
 # Imports
 from os import path
-from fabric.api import run, get, put, env, sudo, hosts, local, settings
+from fabric.api import run, get, put, sudo, hosts, local, settings
 from fabric.context_managers import cd, lcd
 from jinja2 import Environment, FileSystemLoader
 from string import ascii_letters, digits
@@ -481,7 +481,8 @@ def setup_production_code():
             sudo(python_env + 'python %s/manage.py syncdb' % ds.app_name, user=ds.username_main, group='www-data')
 
             # Collect static
-            sudo(python_env + 'python %s/manage.py collectstatic' % ds.app_name, user=ds.username_main, group='www-data')
+            sudo(python_env + 'python %s/manage.py collectstatic' %
+                 ds.app_name, user=ds.username_main, group='www-data')
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -588,9 +589,10 @@ def install_software(pkg_list, root=False):
         else:
             sudo('apt-get install -y %s' % install_str)
 
-
+'''
 def get_host():
     """
     Utility function get get the current operating user
     """
     return env.host_string.split('@')[0]
+'''
