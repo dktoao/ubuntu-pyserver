@@ -349,12 +349,12 @@ def install_python():
             sudo(python_env + 'pip install django', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install uwsgi', user=ds.username_main, group='www-data')
             sudo(python_env + 'pip install psycopg2', user=ds.username_main, group='www-data')
-            #sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
-            #sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
-            #sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
-            #sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
-            #sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
-            #sudo(python_env + 'pip install django-treebeard', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install numpy', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install scipy', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install matplotlib', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install pandas', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install sympy', user=ds.username_main, group='www-data')
+            sudo(python_env + 'pip install django-treebeard', user=ds.username_main, group='www-data')
         
     # Create Upstart file to run uWSGI
     upload_config('/etc/init', 'uwsgi.conf', {
@@ -362,7 +362,7 @@ def install_python():
         'domain': ds.domain,
     })
 
-http://stackoverflow.com/questions/3596260/git-remote-add-with-other-ssh-port
+
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_repo():
     """
@@ -440,7 +440,7 @@ def configure_local_workspace():
 
         # Syncdb to be done manually with launched project
         if ds.local_test_db and ds.make_new_project:
-            run(python_env + 'python %s/manage.py syncdb' %ds.app_name)
+            run(python_env + 'python %s/manage.py syncdb' % ds.app_name)
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -483,127 +483,6 @@ def setup_production_code():
             # Collect static
             sudo(python_env + 'python %s/manage.py collectstatic' % ds.app_name, user=ds.username_main, group='www-data')
 
-
-'''
-@hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def configure_django_workspace():
-    
-    # Configure app directory and make appropriate files and sub directories
-    python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
-    run('mkdir -p workspace/%s' % ds.domain, warn_only=True)
-
-    with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
-        if ds.make_new_project:
-            run(python_env + 'django-admin.py startproject %s' % ds.app_name)
-
-            upload_config('.', '.gitignore', {
-                'app_name': ds.app_name,
-            }, user=ds.username_main)
-
-            run(python_env + 'pip freeze >> requirements.txt')  # requirements file
-
-            # Upload new django config file
-            upload_config('%s/%s' % (ds.app_name, ds.app_name), 'settings.py', {
-                'domain': ds.domain,
-            }, user=ds.username_main)
-
-        # Set up secrets.py file and change ownership to root
-        put('config/secrets_template.py', '%s/%s/secrets_template.py' % (ds.app_name, ds.app_name))
-        upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
-            'secret_key': random_password('DJANGO TEST SECRETKEY', 80, 120),
-            'debug': 'True',
-            'template_debug': 'True',
-            'django_db_name': ds.django_db_test_name,
-            'django_db_user': ds.django_db_test_user,
-            'django_db_pwd': random_password('DJANGO TEST DATABASE'),
-            'username_email': ds.username_email,
-            'password_email': random_password('MAIL USER'),
-        }, rename="secrets.py", user=ds.username_main, permissions='600')
-
-        # Sync the database
-        run(python_env + 'python %s/manage.py syncdb' % ds.app_name)
-
-
-@hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def setup_repo():
-    """
-    Sets up a git repositoNonery where the website code can live and be deployed from
-    """
-    # Install git
-    install_software(['git'])
-    
-    # Set up a directory
-    sudo('mkdir -p /home/git/%s.git' % ds.domain, user='git')
-    with cd('/home/git/%s.git' % ds.domain):
-        # Set up repository
-        sudo('git --bare init', user='git')
-        
-    # Push to the git repository
-    if ds.push_existing_repo:
-        with lcd(ds.existing_repo_location):
-            local('git remote add %s git@%s:/home/git/%s.git' % (ds.server_name, ds.domain, ds.domain))
-            local('git push origin master')
-
-        run('mkdir -p workspace/%s' % ds.domain)
-        with cd('workspace/%s' % ds.domain):
-            run('git init')
-            run('git config --global user.email "%s"' % ds.email_address_webmaster)
-            run('git config --global user.name "%s"' % ds.username_main)
-            run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
-            run('git pull origin master')
-
-    else:
-        with cd('/home/%s/workspace/%s' % (ds.username_main, ds.domain)):
-            run('git init')
-            run('git config --global user.email "%s"' % ds.email_address_webmaster)
-            run('git config --global user.name "%s"' % ds.username_main)
-            #run('git init')
-            run('git add .')
-            run('git commit -m "initial commit"')
-            run('git remote add origin git@localhost:/home/git/%s.git' % ds.domain)
-            run('git push origin master')
-
-
-@hosts('%s@%s' % (ds.username_main, ds.ip_address))
-def setup_production_code():
-    """
-    Sets up production code on the server
-    """
-    
-    # Deploy to webserver domain (via tutorial at 
-    # http://grimoire.ca/git/stop-using-git-pull-to-deploy)
-    sudo('mkdir -p /var/www/%s' % ds.domain)
-    sudo('chown -R %s:www-data /var/www' % ds.username_main)
-    with cd('/var/www/%s' % ds.domain):
-        sudo('git init', user=ds.username_main, group='www-data')
-        sudo('git remote add origin git@localhost:/home/git/%s.git' %
-             ds.domain, user=ds.username_main, group='www-data')
-        sudo('git fetch --all', user=ds.username_main, group='www-data')
-        sudo('git checkout --force "origin/master"', user=ds.username_main, group='www-data')
-        
-        # Add production secrets file
-        upload_config('%s/%s' % (ds.app_name, ds.app_name), 'secrets_template.py', {
-            'secret_key': random_password('DJANGO SECRETKEY', 80, 120),
-            'debug': 'False',
-            'template_debug': 'False',
-            'django_db_name': ds.django_db_name,
-            'django_db_user': ds.django_db_user,
-            'django_db_pwd': random_password('DJANGO DATABASE'),
-            'username_email': ds.username_email,
-            'password_email': random_password('MAIL USER'),
-        }, rename="secrets.py", user=ds.username_main, group='www-data', permissions='640')
-        
-        # Create a static folder
-        sudo('mkdir static', user=ds.username_main, group='www-data')
-        
-        python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
-        
-        # Syncdb
-        sudo(python_env + 'python %s/manage.py syncdb' % ds.app_name, user=ds.username_main, group='www-data')
-        
-        # Collect static
-        sudo(python_env + 'python %s/manage.py collectstatic' % ds.app_name, user=ds.username_main, group='www-data')
-'''
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def setup_bash_aliases():
