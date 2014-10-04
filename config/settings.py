@@ -27,8 +27,6 @@ DEBUG = secrets.DEBUG
 #TEMPLATE_DEBUG = True
 TEMPLATE_DEBUG = secrets.TEMPLATE_DEBUG
 
-ALLOWED_HOSTS = []
-
 
 # Application definition
 
@@ -90,9 +88,12 @@ STATIC_URL = '/static/'
 STATIC_ROOT = '/var/www/static/'
 
 # Email Settings
+EMAIL_USE_TLS
 EMAIL_HOST_USER = secrets.MAIL_USER
 EMAIL_HOST_PASSWORD = secrets.MAIL_PASSWORD
 
 # Allowed Hosts
 ALLOWED_HOSTS = ['.{{domain}}',
-                 '.{{domain}}.',]
+                 '.{{domain}}.', ]
+
+TEMPLATE_DIRS = [os.path.join(BASE_DIR, 'templates')].extend(secrets.ADDITIONAL_TEMPLATE_DIRS)

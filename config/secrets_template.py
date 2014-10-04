@@ -11,3 +11,4 @@ DATABASE_HOST = 'localhost'
 DATABASE_PORT = '5432'
 MAIL_USER = '{{username_email}}'
 MAIL_PASSWORD = '{{password_email}}'
+ADDITIONAL_TEMPLATE_DIRS = []
