@@ -1,3 +1,2 @@
-1. Setup DKIM Authentication
-2. Setup Spamassassin
-3. Refine Settings
+1. Setup Spamassassin
+2. Refine available deployment settings

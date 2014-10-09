@@ -1,7 +1,7 @@
 Ubuntu14LTS-SciServer
 =====================
 
-_Fabric file for the deployment of a fully capable scientific web server on an 
+_Fabric file for the deployment of a personal, fully capable, scientific web server on an
 Ubuntu 14.04 LTS machine._
 
 ## USE
@@ -29,7 +29,7 @@ user account and a migration ready connection to a PostgreSQL database
     - Sympy
     - Matplotlib
     - psycopg2
-    - South (depreciated with Django 1.7)
+    (or via supplied "requriements.txt" file)
         
 ### Database
 - PostgreSQL
@@ -39,12 +39,13 @@ user account and a migration ready connection to a PostgreSQL database
 - nginx
     
 ### Email
-- Exim (send only)
+- Postgres (SMTP)
+- Dovecot (IMAP)
 - Authentication via DKIM
     
 ### App Deployment
 - Git, set up to automatically deploy to a production server
-- On server workspace that is easily connected to Cloud9 ide.
+- On server workspace that is easily connected to Cloud9 IDE.
     
 ### Security
 - iptables firewall
@@ -64,9 +65,6 @@ user account and a migration ready connection to a PostgreSQL database
     - live: production code root
     - wspc: on-server workspace
     - repo: git repository
-- function to properly install a python package "installpypkg"
-- function to deploy repository head to live "livedeploy"
-- function to migrate the production database "migrateproddb"
 
 ## ADDITIONAL MANUAL DEPLOYMENT STEPS
 
@@ -83,5 +81,5 @@ application name
 git@{ip\_address}:~/{domain\_name}.git
 4. Create a local secrets.py file 
 5. Tweak the values in /etc/init/uwsgi.conf to match server specs
-6. Replace the self signed certificates and keys at /etc/nginx/ to a non self-signed 
-certificate
+6. Replace the self signed certificates and keys at /etc/ssl/universal/certs/server.crt
+to a non self-signed certificate

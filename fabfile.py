@@ -193,7 +193,7 @@ def make_ssl_keys():
     sudo('openssl x509 -req -days 3650 -in server.csr -signkey private.key -out server.crt')
 
     # Download a copy of the public key
-    get('public.key', local_path='info')
+    #get('public.key', local_path='info')
 
     # Change access permissions for files
     sudo('chown root:secured private.key public.key server.crt')
@@ -257,7 +257,7 @@ def install_mail_system():
     sudo('debconf-set-selections <<< "dovecot-core dovecot-core/create-ssl-cert string false"')
 
     # Install the required software
-    install_software(['postfix', 'dovecot-imapd'])
+    install_software(['postfix', 'dovecot-imapd', 'opendkim', 'opendkim-tools'])
 
     # Add postfix and dovecot to the secured group
     sudo('usermod -G secured postfix')
@@ -276,8 +276,25 @@ def install_mail_system():
     upload_config('/etc/dovecot/conf.d', '10-master.conf', {})
     upload_config('/etc/dovecot/conf.d', '10-ssl.conf', {})
 
+    # Create a DKIM key
+    sudo('mkdir /etc/ssl/mail')
+    sudo('opendkim-genkey -t -s %s -d %s' % (ds.dkim_selector, ds.domain))
+    get('%s.txt' % ds, local_path='info')
+    sudo('chown root:opendkim %s.private' % ds.dkim_selector)
+    sudo('chmod 640 %s.private')
+    sudo('mv %s.private /etc/ssl/mail/' % ds.dkim_selector)
+    sudo('mv %s.txt /etc/ssl/mail' % ds.dkim_selector)
+
+    # Configure OpenDKIM
+    upload_config('/etc', 'opendkim.conf', {
+        'domain': ds.domain,
+        'dkim_selector': ds.dkim_selector,
+    })
+    upload_config('/etc/default', 'opendkim', {})
+
     # Restart programs
     sudo('service dovecot restart')
+    sudo('service opendkim restart')
     sudo('service postfix restart')
 
 
@@ -589,10 +606,7 @@ def install_software(pkg_list, root=False):
         else:
             sudo('apt-get install -y %s' % install_str)
 
-'''
-def get_host():
-    """
-    Utility function get get the current operating user
-    """
-    return env.host_string.split('@')[0]
-'''
+
+def temp():
+    get('/etc/opendkim.conf')
+    get('/etc/default/opendkim')
