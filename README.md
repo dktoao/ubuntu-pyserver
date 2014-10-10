@@ -5,12 +5,12 @@ _Fabric file for the deployment of a personal, fully capable, scientific web ser
 Ubuntu 14.04 LTS machine._
 
 ## USE
-1. Insure that you have a public ssh key at ~/.ssh/id_rsa.pub
+1. Insure that you have a public ssh key at ~/.ssh/id\_rsa.pub
 2. Make a copy of deploy\_settings\_template.py in deploy\_settings.py and put in the appropriate server settings
 3. Install the requirements listed below
-4. run "fab full_setup" to setup server
+4. run "fab full\_setup" to setup server
 5. Wait for restart
-6. run "fab full_deploy" to configures server and install pakages.
+6. run "fab full\_deploy" to configures server and install pakages.
 7. Enjoy!
 
 ## REQUIREMENTS
@@ -29,7 +29,7 @@ user account and a migration ready connection to a PostgreSQL database
     - Sympy
     - Matplotlib
     - psycopg2
-    (or via supplied "requriements.txt" file)
+    - (or via supplied "requriements.txt" file)
         
 ### Database
 - PostgreSQL
@@ -39,7 +39,7 @@ user account and a migration ready connection to a PostgreSQL database
 - nginx
     
 ### Email
-- Postgres (SMTP)
+- Postfix (SMTP)
 - Dovecot (IMAP)
 - Authentication via DKIM
     
