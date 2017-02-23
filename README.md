@@ -1,11 +1,10 @@
-Ubuntu14LTS-SciServer
+ubuntu-pyserver
 =====================
 
-_Fabric file for the deployment of a personal, fully capable, scientific web server on an
-Ubuntu 14.04 LTS machine._
+_Fabric file for the deployment of a personal, fully capable, web server on an with Ubuntu LTS linux distro._
 
 ## USE
-1. Insure that you have a public ssh key at ~/.ssh/id\_rsa.pub
+1. Insure that you have a public ssh key at ~/.ssh/
 2. Make a copy of deploy\_settings\_template.py in deploy\_settings.py and put in the appropriate server settings
 3. Install the requirements listed below
 4. run "fab full\_setup" to setup server
@@ -23,11 +22,6 @@ Ubuntu 14.04 LTS machine._
 - Python / Django, Set up with proper virtualenv, a super
 user account and a migration ready connection to a PostgreSQL database
     - Django
-    - Numpy
-    - Scipy
-    - Pandas
-    - Sympy
-    - Matplotlib
     - psycopg2
     - (or via supplied "requriements.txt" file)
         
