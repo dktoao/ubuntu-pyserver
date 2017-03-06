@@ -118,7 +118,7 @@ def setup_users():
     run('adduser --gecos "" --disabled-password git')
     run('echo "git:%s" | chpasswd' % git_password)
     # copy remote public key to .ssh/authorized_keys
-    run('mkdir -r  /home/git/.ssh')
+    run('mkdir /home/git/.ssh')
     put('~/.ssh/id_rsa.pub', '/home/git/.ssh/authorized_keys')
     # add local public key to .ssh/authorized_keys
     run('cat /home/%s/.ssh/id_rsa.pub >> /home/git/.ssh/authorized_keys' % ds.username_main)
