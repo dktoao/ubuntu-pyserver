@@ -1,0 +1,8 @@
+/*
+/*/
+!.gitignore
+!/home/
+!/etc/
+**/.bash_history
+**/.cache/
+**/.viminfo

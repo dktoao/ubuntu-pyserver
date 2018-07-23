@@ -1,5 +1,10 @@
 # Change these settings to match your deployment environment and
 # put them in a deploy_settings.py file.
+
+# NOTE: Illegal user names
+# root, daemon, bin, sys, sync, games, man, lp, mail, news, uucp, proxy,
+# www-data, backup, list, irc, gnats, nobody, libuuid, syslog, messagebus,
+# sshd
 username_main = 'username'
 username_email = 'mailname'
 email_address_webmaster = 'webmaster@example.com'
@@ -18,7 +23,7 @@ dkim_selector = 'web'
 python_version = '3.4'
 python_req_file = None  # On local machine
 postgres_version = '9.3'
-password_login = 'yes'
+password_login = 'no'
 use_https = True
 local_test_db = True
 remove_temp_files = True

@@ -1,6 +1,6 @@
 """
 Fabric file for the deployment of a fully capable scientific web server on an
-Ubuntu 14.04 LTS machine.
+Ubuntu machine.
     
 Author: Daniel Kuntz
 """
@@ -27,8 +27,9 @@ def full_setup():
     Runs all root deployment scripts
     """
     # Initial Setup
-    setup_hosts()
     upgrade()
+    setup_config_version_control()
+    setup_hosts()
     setup_users()
     setup_firewall()
     setup_fail2ban()
@@ -55,6 +56,31 @@ def full_deploy():
 
 
 @hosts('root@%s' % ds.ip_address)
+def upgrade():
+    """
+    Upgrade server software
+    """
+    
+    #Update Repository
+    run('apt-get update')
+    run('apt-get -y upgrade')
+
+@hosts('root@%s' % ds.ip_address)
+def setup_config_version_control():
+    """
+    Setup a git repository that keeps track of changes to the /etc and /home
+    folders
+    """
+    install_software(['git'], root=True)
+    upload_config('/', '.gitignore_config', {}, rename='.gitignore')
+    run('git config --global user.name "%s"' % ds.username_main)
+    run('git config --global user.emal "%s@%s"' % (ds.username_main, ds.domain))
+    with cd('/'):
+        run('git init')
+        run('git add .')
+        run('git commit -m "setup_config_version_control"')
+        
+@hosts('root@%s' % ds.ip_address)
 def setup_hosts():
     """
     Set up host configurations
@@ -71,18 +97,7 @@ def setup_hosts():
         'domain': ds.domain,
         'ip_address': ds.ip_address,
     })
-
-
-@hosts('root@%s' % ds.ip_address)
-def upgrade():
-    """
-    Upgrade server software
-    """
-    
-    #Update Repository
-    run('apt-get update')
-    run('apt-get -y upgrade')
-
+    do_git_commit('setup_hosts')
 
 @hosts('root@%s' % ds.ip_address)
 def setup_users():
@@ -126,6 +141,7 @@ def setup_users():
     run('chown -R git:git /home/git/.ssh')
     run('chmod 500 /home/git/.ssh')
     run('chmod 600 /home/git/.ssh/authorized_keys')
+    do_git_commit('setup_users')
 
 
 @hosts('root@%s' % ds.ip_address)
@@ -141,6 +157,7 @@ def setup_firewall():
     # Load startup file
     put('config/firewall', '/etc/network/if-pre-up.d')
     run('chmod +x /etc/network/if-pre-up.d/firewall')
+    do_git_commit('setup_firewall')
 
 
 @hosts('root@%s' % ds.ip_address)
@@ -150,6 +167,7 @@ def setup_fail2ban():
     """
 
     install_software(['fail2ban'], root=True)
+    # Not necessary to commit because install_software already does
 
 
 @hosts('root@%s' % ds.ip_address)
@@ -158,9 +176,12 @@ def remove_root_login():
     Removing ability to log-in as root and set password login ability
     """
     
-    upload_config('/etc/ssh', 'sshd_config', {
-        'password_login': ds.password_login,
-    })
+    config_edit('/etc/ssh/sshd_config', 
+        '^PermitRootLogin.*$', 'PermitRootLogin no')
+    config_edit('/etc/ssh/sshd_config',
+        '^PasswordAuthentication.*$', 
+        'PasswordAuthentication %s' %ds.password_login)
+    do_git_commit('remove_root_login')
 
 
 @hosts('root@%s' % ds.ip_address)
@@ -168,7 +189,6 @@ def restart():
     """
     Restart the server
     """
-    #reboot()
     sudo('reboot')
 
 
@@ -205,6 +225,8 @@ def make_ssl_keys():
     sudo('mv server.crt /etc/ssl/universal/certs/')
     sudo('mv server.csr /etc/ssl/universal/')
 
+    do_git_commit("make_ssl_keys")
+
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_postgres():
@@ -231,13 +253,18 @@ def install_postgres():
              (ds.django_db_test_user, random_password('DJANGO TEST DATABASE')), user='postgres')
         sudo('createdb -O %s %s' % (ds.django_db_test_user, ds.django_db_test_name), user='postgres')
     # Update the postgres pg_hba.conf file
-    upload_config('/etc/postgresql/%s/main' % ds.postgres_version, 'pg_hba.conf', {
-        'django_db_user': ds.django_db_user,
-        'django_db_test_user': ds.django_db_test_user,
-    })
+    config_append('/etc/postgresql/%s/main/pg_hba.conf' % ds.postgres_version, 
+        '^\s*#\s*TYPE\s*DATABASE\s*USER\s*ADDRESS\s*METHOD\s*$',
+        ['local  all  %s  md5' % ds.django_db_user, 
+         'local  all  %s  md5' % ds.django_db_test_user])
+    #upload_config('/etc/postgresql/%s/main' % ds.postgres_version, 'pg_hba.conf', {
+    #    'django_db_user': ds.django_db_user,
+    #    'django_db_test_user': ds.django_db_test_user,
+    #})
     # Restart the postgres server
     sudo('service postgresql restart')
-
+    
+    #do_git_commit('install_postgres')
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_mail_system():
@@ -529,7 +556,8 @@ def upload_config(upload_location, local_file, values, rename=None, user='root',
         group = user
     
     # Create and upload a configuration file
-    sudo('mv %s/%s %s/%s.backup' % (upload_location, external_file, upload_location, external_file), warn_only=True)
+    # Still need to do this even though we are under version control?
+    #sudo('mv %s/%s %s/%s.backup' % (upload_location, external_file, upload_location, external_file), warn_only=True)
     template = template_env.get_template(local_file)
     config_file = template.render(values)
     with open('tmp/%s' % external_file, 'wb') as fh:
@@ -577,7 +605,7 @@ def random_password(description, min_chars=10, max_chars=20):
         return password
 
 
-def install_software(pkg_list, root=False):
+def install_software(pkg_list, root=False, update_repo=True):
     """
     Installs packages in the pkg_list
 
@@ -599,14 +627,37 @@ def install_software(pkg_list, root=False):
             install_pkgs.append(pkg)
 
     # Install each package
-    if install_pkgs:
-        install_str = ' '.join(install_pkgs)
-        if root:
-            run('apt-get install -y %s' % install_str)
-        else:
-            sudo('apt-get install -y %s' % install_str)
+    if not install_pkgs:
+        return
+
+    install_str = ' '.join(install_pkgs)
+    if root:
+        run('apt-get install -y %s' % install_str)
+    else:
+        sudo('apt-get install -y %s' % install_str)
+
+    # Update the repo if needed
+    if update_repo:
+        do_git_commit('installed: %s' % install_str)
+
+def do_git_commit(message):
+    with cd('/'):
+        sudo('git add .')
+        sudo('git commit -m "%s"' % message)
+
+def config_edit(filename, original, replace):
+    run("sed -i 's/%s/%s/' %s" % (original, replace, filename))
+
+def config_append(filename, search_for, append_lines):
+    line_number = sudo('grep -n "%s" -e "%s"' % (filename, search_for))
+    line_number = int(line_number.split(':')[0])
+    for (idx, line) in enumerate(append_lines):
+        sudo("sed -i '%da %s' %s" % (line_number+idx, line, filename))
 
 
+@hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def temp():
-    get('/etc/opendkim.conf')
-    get('/etc/default/opendkim')
+    config_append('/etc/postgresql/%s/main/pg_hba.conf' % ds.postgres_version, 
+        '^\s*#\s*TYPE\s*DATABASE\s*USER\s*ADDRESS\s*METHOD\s*$',
+        ['local   all             %-30s          md5' % ds.django_db_user, 
+         'local   all             %-30s          md5' % ds.django_db_test_user])
