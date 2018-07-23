@@ -257,10 +257,6 @@ def install_postgres():
         '^\s*#\s*TYPE\s*DATABASE\s*USER\s*ADDRESS\s*METHOD\s*$',
         ['local  all  %s  md5' % ds.django_db_user, 
          'local  all  %s  md5' % ds.django_db_test_user])
-    #upload_config('/etc/postgresql/%s/main' % ds.postgres_version, 'pg_hba.conf', {
-    #    'django_db_user': ds.django_db_user,
-    #    'django_db_test_user': ds.django_db_test_user,
-    #})
     # Restart the postgres server
     sudo('service postgresql restart')
     
