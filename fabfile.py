@@ -1,6 +1,5 @@
 """
-Fabric file for the deployment of a fully capable scientific web server on an
-Ubuntu machine.
+Fabric file with various scripts that can be used to setup a Ubuntu web server.
     
 Author: Daniel Kuntz
 """
@@ -71,7 +70,7 @@ def setup_config_version_control():
     Setup a git repository that keeps track of changes to the /etc and /home
     folders
     """
-    install_software(['git'], root=True)
+    install_software(['git'], root=True, update_repo=False)
     upload_config('/', '.gitignore_config', {}, rename='.gitignore')
     run('git config --global user.name "%s"' % ds.username_main)
     run('git config --global user.emal "%s@%s"' % (ds.username_main, ds.domain))
@@ -83,12 +82,17 @@ def setup_config_version_control():
 @hosts('root@%s' % ds.ip_address)
 def setup_hosts():
     """
-    Set up host configurations
+    Set up host configurations.
+    
+    This works up to Ubuntu 14.04 LTS, for later versions use 'setup_hosts_16()'
     """
     
     # Set the hostname and mailname
-    run('echo "%s" > /etc/hostname' % ds.server_name)
-    run('hostname -F /etc/hostname')
+    if ds.ubuntu_version <= 14:
+        run('echo "%s" > /etc/hostname' % ds.server_name)
+        run('hostname -F /etc/hostname')
+    else:
+        run('hostnamectl set-hostname %s' % ds.server_name)
     run('echo "%s" > /etc/mailname' % ds.domain)
     
     # Update the /etc/hosts file
@@ -98,6 +102,7 @@ def setup_hosts():
         'ip_address': ds.ip_address,
     })
     do_git_commit('setup_hosts')
+    
 
 @hosts('root@%s' % ds.ip_address)
 def setup_users():
@@ -111,17 +116,17 @@ def setup_users():
     run('usermod -a -G sudo %s' % ds.username_main)
     run('usermod -a -G www-data %s' % ds.username_main)
     # copy local public key to .ssh/authorized_keys
-    run('mkdir /home/%s/.ssh' % ds.username_main)
+    run('mkdir /home/%s/.ssh' % ds.username_main, warn_only=True)
     with cd('/home/%s/.ssh' % ds.username_main):
-        put('~/.ssh/id_rsa.pub', 'authorized_keys')
+        put('~/.ssh/id_%s.pub' % ds.ssh_keytype, 'authorized_keys')
         # Create own private key
-        run('ssh-keygen -t rsa -C "%s@%s" -f id_rsa -N ""' % (ds.username_main, ds.server_name))
+        run('ssh-keygen -t rsa -C "%s@%s" -f id_%s -N ""' % (ds.username_main, ds.server_name, ds.ssh_keytype))
         # Change ownership and permissions for uploaded file
         run('chown -R %s:%s .' % (ds.username_main, ds.username_main))
         run('chmod 500 .')
         run('chmod 600 authorized_keys')
-        run('chmod 600 id_rsa')
-        run('chmod 644 id_rsa.pub')
+        run('chmod 600 id_%s' % ds.ssh_keytype)
+        run('chmod 644 id_%s.pub' % ds.ssh_keytype)
     
     # Create mail user
     mail_password = random_password('MAIL USER')
@@ -133,10 +138,10 @@ def setup_users():
     run('adduser --gecos "" --disabled-password git')
     run('echo "git:%s" | chpasswd' % git_password)
     # copy remote public key to .ssh/authorized_keys
-    run('mkdir /home/git/.ssh')
-    put('~/.ssh/id_rsa.pub', '/home/git/.ssh/authorized_keys')
+    run('mkdir /home/git/.ssh', warn_only=True)
+    put('~/.ssh/id_%s.pub' % ds.ssh_keytype, '/home/git/.ssh/authorized_keys')
     # add local public key to .ssh/authorized_keys
-    run('cat /home/%s/.ssh/id_rsa.pub >> /home/git/.ssh/authorized_keys' % ds.username_main)
+    run('cat /home/%s/.ssh/id_%s.pub >> /home/git/.ssh/authorized_keys' % (ds.username_main, ds.ssh_keytype))
     # Change ownership and permissions for uploaded file
     run('chown -R git:git /home/git/.ssh')
     run('chmod 500 /home/git/.ssh')
@@ -198,10 +203,10 @@ def make_ssl_keys():
     Creates a security keys, certificates and a group with permissions
     """
     # Create directory for public certs
-    sudo('mkdir /etc/ssl/universal')
-    sudo('mkdir /etc/ssl/universal/private')
-    sudo('mkdir /etc/ssl/universal/certs')
-    sudo('mkdir /etc/ssl/universal/public')
+    sudo('mkdir /etc/ssl/universal', warn_only=True)
+    sudo('mkdir /etc/ssl/universal/private', warn_only=True)
+    sudo('mkdir /etc/ssl/universal/certs', warn_only=True)
+    sudo('mkdir /etc/ssl/universal/public', warn_only=True)
 
     # Create group for programs that need to access certificates
     sudo('addgroup secured')
@@ -300,7 +305,7 @@ def install_mail_system():
     upload_config('/etc/dovecot/conf.d', '10-ssl.conf', {})
 
     # Create a DKIM key
-    sudo('mkdir /etc/ssl/mail')
+    sudo('mkdir /etc/ssl/mail', warn_only=True)
     sudo('opendkim-genkey -t -s %s -d %s' % (ds.dkim_selector, ds.domain))
     get('%s.txt' % ds, local_path='info')
     sudo('chown root:opendkim %s.private' % ds.dkim_selector)
@@ -331,7 +336,7 @@ def install_nginx():
     install_software(['nginx-full'])
     
     # Create directory for nginx logs
-    sudo('mkdir -p /var/log/%s' % ds.domain)
+    sudo('mkdir -p /var/log/%s' % ds.domain, warn_only=True)
     
     # Create a self-signed SSL certificate if required
     if ds.use_https:
@@ -372,7 +377,7 @@ def install_python():
     ])
     
     # Make a virtual environment for the user and activate it
-    sudo('mkdir -p /var/venv')
+    sudo('mkdir -p /var/venv', warn_only=True)
     sudo('chown %s:www-data /var/venv' % ds.username_main)
     with cd('/var/venv'):
         sudo('virtualenv --python=python%s %s' %
@@ -412,7 +417,7 @@ def setup_repo():
     install_software(['git'])
 
     # Set up a directory
-    sudo('mkdir -p /home/git/%s.git' % ds.domain, user='git')
+    sudo('mkdir -p /home/git/%s.git' % ds.domain, user='git', warn_only=True)
     with cd('/home/git/%s.git' % ds.domain):
         # Set up repository
         sudo('git --bare init', user='git')
@@ -491,7 +496,7 @@ def setup_production_code():
 
     # Deploy to webserver domain (via tutorial at
     # http://grimoire.ca/git/stop-using-git-pull-to-deploy)
-    sudo('mkdir -p /var/www/%s' % ds.domain)
+    sudo('mkdir -p /var/www/%s' % ds.domain, warn_only=True)
     sudo('chown -R %s:www-data /var/www' % ds.username_main)
     with cd('/var/www/%s' % ds.domain):
         sudo('git init', user=ds.username_main, group='www-data')
@@ -513,7 +518,7 @@ def setup_production_code():
         }, rename="secrets.py", user=ds.username_main, group='www-data', permissions='640')
 
         # Create a static folder
-        sudo('mkdir static', user=ds.username_main, group='www-data')
+        sudo('mkdir static', user=ds.username_main, group='www-data', warn_only=True)
         python_env = 'source /var/venv/%s/bin/activate && ' % ds.domain
 
         # Syncdb (to be done manually with deployment of existing code
@@ -535,9 +540,8 @@ def setup_bash_aliases():
         'username_main': ds.username_main,
         'app_name': ds.app_name,
     }, user=ds.username_main)
+            
 
-
-# Helper functions
 def upload_config(upload_location, local_file, values, rename=None, user='root', group=None, permissions='644'):
     """
     Creates a backup of the original file on the server, fills in the given
@@ -599,7 +603,6 @@ def random_password(description, min_chars=10, max_chars=20):
         fh.close()
 
         return password
-
 
 def install_software(pkg_list, root=False, update_repo=True):
     """
