@@ -1,20 +1,39 @@
 # Server information
 mydomain = {{domain}}
 myorigin = $mydomain
+  # Various other parameters use these two variables as default values
 
 # SMTP service
 smtpd_tls_security_level = may
 smtpd_tls_cert_file = /etc/ssl/universal/certs/server.crt
 smtpd_tls_key_file = /etc/ssl/universal/private/private.key
+  # This allows STARTTLS to be used on all incoming SMTP connections. Note that
+  # 'postfix' must be added to the 'secured' group to be able to accelss files
+  # in /etc/ssl/private
 
 # Policies
 mynetworks = [::1]/128, 127.0.0.0/8, [::fff:127.0.0.0]/104
+  # This lists the IP addresses that are considered "trusted" and can use this
+  # server to send mail to the outside (i.e. to other domains). By default,
+  # only "localhost" is allowed. From everyone else only mail to domains in
+  # $mydestination will be accepted.
 mydestination = $mydomain, localhost
+  # List of domains to accept mail for, from any IP address
 
 # Delivery
 alias_maps = hash:/etc/aliases
+  # This keeps system-wide aliases. It's good to set it explicitly because the 
+  # default values sometimes includes NIS, which doesn't make sense
 recipient_delimiter = +
+  # Tells postfix to split the local part of addresses at the first '+', 
+  # so-called "plus-addressing": mail sent to diti.foo@ will be delivered to
+  # the diti@ mailbox
 home_mailbox = Mail/
+  # By default, Postfix delivers mail to /var/mail/$USER in the mbox format, 
+  # which is simple enough but has may problems. Especially with IMAP since the
+  # entire file has to be rewritten whenever you move a message or even mark one
+  # as "read". This changes both to use Maildir. (Must also change the
+  # appropriate setting in 10.mail.conf)
 
 # Authentication
 smtpd_recipient_restrictions = permit_sasl_authenticated, permit_mynetworks, reject_unauth_destination

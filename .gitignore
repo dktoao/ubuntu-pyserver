@@ -15,3 +15,6 @@ public.key
 # Temporary files
 /tmp/
 /tmp/tmp.txt
+
+# Generate info files
+/info/*

@@ -1,5 +1,7 @@
 """
 Fabric file with various scripts that can be used to setup a Ubuntu web server.
+
+Currently only works with Fabric version<2
     
 Author: Daniel Kuntz
 """
@@ -265,7 +267,7 @@ def install_postgres():
     # Restart the postgres server
     sudo('service postgresql restart')
     
-    #do_git_commit('install_postgres')
+    do_git_commit('install_postgres')
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
 def install_mail_system():
@@ -293,23 +295,48 @@ def install_mail_system():
     sudo('usermod -G secured dovenull')
 
     # Configure Postfix
+    # Upload the "cleaned up" configuration
     upload_config('/etc/postfix', 'main.cf', {
         'domain': ds.domain,
     })
-    upload_config('/etc/postfix', 'master.cf', {})
+    # Uncomment certain lines in the master.cf
+    config_edit('/etc/postfix/master.cf', 
+        '^.*syslog_name.*$', 
+        '  -o syslog_name=postfix/submission')
+    config_edit('/etc/postfix/master.cf', 
+        '^.*smtpd_tls_security_level=.*$', 
+        '  -o smtpd_tls_security_level=encrypt')
+    config_edit('/etc/postfix/master.cf', 
+        '^.*smtpd_sasl_auth_enable=.*$', 
+        '  -o smtpd_sasl_auth_enable=yes')
+    config_edit('/etc/postfix/master.cf',
+        '^.*smtpd_relay_restrictions=.*$', 
+        '  -o smtpd_relay_restrictions=permit_sasl_authenticated,reject')
+    config_edit('/etc/postfix/master.cf', 
+        '^.*milter_macro_daemon_name.*$',
+        '  -o milter_macro_daemon_name=ORIGINATING')
 
     # Configure Dovecot
-    upload_config('/etc/dovecot/conf.d', '10-auth.conf', {})
-    upload_config('/etc/dovecot/conf.d', '10-mail.conf', {})
+    #upload_config('/etc/dovecot/conf.d', '10-auth.conf', {})
+    config_edit('/etc/dovecot/conf.d/10-auth.conf', 
+        '^.*disable_plaintext_auth.*$', 
+        'disable_plaintext_auth = yes')
+    config_edit('/etc/dovecot/conf.d/10-auth.conf',
+        '^.*auth_mechanisms.*$',
+        'auth_mechanisms = plain login')
+    #upload_config('/etc/dovecot/conf.d', '10-mail.conf', {})
+    config_edit('/etc/dovecot/conf.d/10-mail.conf',
+        '^.*mail_location.*$',
+        'mail_location = maildir:~/Mail')
     upload_config('/etc/dovecot/conf.d', '10-master.conf', {})
     upload_config('/etc/dovecot/conf.d', '10-ssl.conf', {})
 
     # Create a DKIM key
     sudo('mkdir /etc/ssl/mail', warn_only=True)
     sudo('opendkim-genkey -t -s %s -d %s' % (ds.dkim_selector, ds.domain))
-    get('%s.txt' % ds, local_path='info')
+    get('%s.txt' % ds.dkim_selector, local_path='info', use_sudo=True)
     sudo('chown root:opendkim %s.private' % ds.dkim_selector)
-    sudo('chmod 640 %s.private')
+    sudo('chmod 640 %s.private' % ds.dkim_selector)
     sudo('mv %s.private /etc/ssl/mail/' % ds.dkim_selector)
     sudo('mv %s.txt /etc/ssl/mail' % ds.dkim_selector)
 
@@ -324,6 +351,8 @@ def install_mail_system():
     sudo('service dovecot restart')
     sudo('service opendkim restart')
     sudo('service postfix restart')
+    
+    #do_git_commit("install_mail_system")
 
 
 @hosts('%s@%s' % (ds.username_main, ds.ip_address))
@@ -645,7 +674,7 @@ def do_git_commit(message):
         sudo('git commit -m "%s"' % message)
 
 def config_edit(filename, original, replace):
-    run("sed -i 's/%s/%s/' %s" % (original, replace, filename))
+    sudo("sed -i 's|%s|%s|' %s" % (original, replace, filename))
 
 def config_append(filename, search_for, append_lines):
     line_number = sudo('grep -n "%s" -e "%s"' % (filename, search_for))
